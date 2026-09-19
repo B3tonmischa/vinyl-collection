@@ -15,6 +15,18 @@ RUN npm ci
 FROM deps AS build
 WORKDIR /app
 COPY . .
+# prisma.config.ts loads DATABASE_URL via env() (see that file) so that
+# `prisma migrate deploy` has a real one to connect with at container
+# startup. But the CLI resolves that config file for every command,
+# including `generate` below — which never actually opens a database
+# connection, it only reads schema.prisma and emits client code — so
+# without *some* resolvable value here the config load itself throws
+# before generate gets a chance to run. `.env` is deliberately not in
+# the build context (see .dockerignore — real secrets/config belong in
+# the container at runtime via docker-compose's env_file, not baked
+# into an image layer), so this placeholder exists purely to satisfy
+# that resolution check. It's never read for anything real.
+ENV DATABASE_URL="file:/tmp/build-placeholder.db"
 # Needs network access to binaries.prisma.sh to fetch the schema-engine
 # binary (Prisma 7 CLI behavior — see architecture-and-data-model.md,
 # "Working on this project in a sandboxed environment"). Normal on a

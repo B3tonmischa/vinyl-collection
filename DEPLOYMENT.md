@@ -265,6 +265,29 @@ automatically — no separate manual step.
 
 ## Troubleshooting
 
+- **`docker compose up` fails immediately with `permission denied while
+  trying to connect to the docker API at unix:///var/run/docker.sock`**:
+  `sudo usermod -aG docker $USER` (step 3) only takes effect for
+  sessions started *after* it ran — your current SSH session is still
+  using the group list from before that command, so it doesn't have
+  `docker` group access yet even though the command succeeded. Fix
+  without disconnecting: `newgrp docker`, then retry. Or just close
+  the SSH session and reconnect. Confirm with `groups` — it should
+  list `docker`.
+- **A `WARN` about some unrelated-looking variable name "not set,
+  defaulting to a blank string"** when running `docker compose up`:
+  Compose treats an unescaped `$` inside any `.env` value as the start
+  of a variable reference (`$foo` or `${foo}`) and substitutes it —
+  this is Compose's own interpolation, not something specific to this
+  project. Check `.env` for a stray `$` in `TUNNEL_TOKEN` (shouldn't be
+  one in a real Cloudflare token, but worth eliminating) or anywhere
+  else in the file; a literal `$` you actually want kept needs to be
+  escaped as `$$`. After fixing, `docker compose config` prints the
+  fully resolved compose file with variables substituted — useful to
+  confirm `TUNNEL_TOKEN` actually resolved to your real token and not
+  an empty string (that command prints the real token to your
+  terminal, so don't paste its output anywhere outside your own
+  machine).
 - **Backend container keeps restarting, logs show a migration/network
   error reaching `binaries.prisma.sh`**: this is the same Prisma 7 CLI
   behavior documented in `claude/architecture-and-data-model.md` — the
