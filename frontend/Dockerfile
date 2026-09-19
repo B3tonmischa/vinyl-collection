@@ -9,11 +9,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npx ng build --configuration=production
+RUN npx ng build --configuration=production --base-href /vinyl-collection/
 
-# Caddy both serves the built static SPA and reverse-proxies /api/* to
-# the backend — see Caddyfile. This is the single public-facing
-# container; the backend is not exposed to the host at all.
+# Caddy serves the built static SPA and reverse-proxies the API path —
+# see Caddyfile. Caddy itself isn't exposed to the host or the public
+# internet at all anymore: a separate cloudflared container is the only
+# thing that talks to it, over Cloudflare Tunnel (see docker-compose.yml
+# and DEPLOYMENT.md).
 FROM caddy:2 AS runtime
 COPY --from=build /app/dist/frontend/browser /srv
 COPY Caddyfile /etc/caddy/Caddyfile

@@ -1,28 +1,32 @@
-# DOMAIN and ACME_EMAIL are passed in as environment variables by
-# docker-compose.yml (from the root .env file). Caddy substitutes
-# {$VAR} from its own process environment automatically. Both must be
-# set in .env — an empty ACME_EMAIL leaves `email` with no argument
-# below, which Caddy refuses to start on.
-{
-	email {$ACME_EMAIL}
-}
+# Caddy is purely an internal service now: it has no host-published port
+# and issues no certificates of its own. Public HTTPS is terminated by
+# Cloudflare's edge; the cloudflared container (see docker-compose.yml)
+# makes an outbound-only connection from this network to Cloudflare and
+# forwards matching requests here in plain HTTP. See DEPLOYMENT.md.
+#
+# Cloudflare Tunnel's path-based routing does NOT strip the matched
+# path prefix before forwarding — a request for
+# https://michabrenner.com/vinyl-collection/foo arrives here as
+# /vinyl-collection/foo, not /foo. So Caddy does the stripping itself,
+# via handle_path. The more specific /vinyl-collection/api/* block must
+# come first: Caddy uses the first matching handle/handle_path block in
+# file order, and the plain /vinyl-collection/* block below would also
+# match API requests if it came first.
 
-{$DOMAIN} {
+:80 {
 	encode gzip zstd
 
-	# The frontend's production environment.ts uses apiUrl: '/api', so
-	# every API/uploads call the app makes is under this prefix.
-	# handle_path strips the /api prefix before proxying — the backend's
-	# own routes (/vinyls, /artists, /auth, /uploads) are mounted at
-	# root, not under /api (see architecture-and-data-model.md).
-	handle_path /api/* {
+	# Bare /vinyl-collection (no trailing slash) would otherwise fall
+	# through to the SPA handler below with a path that doesn't match
+	# any static file, and try_files would silently serve index.html
+	# at the wrong base — redirect to the canonical trailing-slash form.
+	redir /vinyl-collection /vinyl-collection/ 308
+
+	handle_path /vinyl-collection/api/* {
 		reverse_proxy backend:3000
 	}
 
-	# Everything else: the Angular SPA. try_files falls back to
-	# index.html for any path that isn't a real static file, so
-	# client-side routes (e.g. /vinyl/12) work on a hard refresh too.
-	handle {
+	handle_path /vinyl-collection/* {
 		root * /srv
 		try_files {path} /index.html
 		file_server

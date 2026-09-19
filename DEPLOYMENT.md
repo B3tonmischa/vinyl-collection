@@ -1,11 +1,17 @@
 # Deploying the vinyl archive on a Raspberry Pi
 
-This is the self-hosting setup: Docker Compose running two containers —
-`backend` (the NestJS API, not exposed to the network directly) and
-`caddy` (serves the built Angular app and reverse-proxies `/api/*` to
-the backend, with automatic HTTPS for your domain). A third, optional
-container, `ddns-updater`, keeps a Porkbun DNS record pointed at your
-home IP if it isn't static.
+This is the self-hosting setup: Docker Compose running three containers —
+`backend` (the NestJS API, not exposed to the network directly), `caddy`
+(serves the built Angular app and reverse-proxies `/vinyl-collection/api/*`
+to the backend), and `cloudflared` (an outbound-only Cloudflare Tunnel
+connection that's the only thing in this stack actually reachable from
+the internet). There is no router configuration involved anywhere in
+this setup — no port forwarding, no dynamic DNS, nothing to change on
+your router at all.
+
+The app is served under a subpath of your own domain —
+`https://michabrenner.com/vinyl-collection` — rather than at the domain's
+root, so the root stays free for whatever else you want there later.
 
 Everything below assumes you're running these commands **on the Pi
 itself**, over SSH or directly. Build natively there rather than
@@ -21,11 +27,14 @@ building on the Pi is the simplest way to guarantee that.
   blank SD card/USB SSD if you haven't already.
 - Another computer to run Raspberry Pi Imager on (your Windows laptop
   works fine) and an SD card or USB SSD for the Pi to boot from.
-- A domain name you control, with its DNS managed at Porkbun (or
-  wherever — Porkbun is only required if you want the optional DDNS
-  container).
-- Access to your home router to forward ports 80 and 443, and to set a
-  DHCP reservation.
+- A domain you control — `michabrenner.com` — and the ability to change
+  its nameservers at whatever registrar holds it (needed once, to add
+  the domain to Cloudflare in step 2).
+- A free Cloudflare account.
+
+Note what's **not** required: access to your router. Cloudflare Tunnel
+makes an outbound-only connection from the Pi, so nothing needs to be
+forwarded or opened inbound.
 
 ## 1. Flash and configure the OS
 
@@ -85,8 +94,10 @@ Two more things worth doing now, before moving on:
 - **Give the Pi a fixed local IP.** Reserve one for its MAC address in
   your router's DHCP settings, rather than setting a static IP on the
   Pi itself — a reservation survives a reinstall, a static IP on the
-  Pi doesn't. You'll want this fixed address for the port forwarding
-  in step 2.
+  Pi doesn't. This isn't required for the tunnel to work (Cloudflare
+  only ever sees the Pi's outbound connection), but it makes SSHing
+  back in later more reliable than depending on `.local` resolution or
+  DHCP handing out a different address.
 - **Check available memory** with `free -h`. If the Pi has 2GB of RAM
   or less, the frontend's Docker build (`ng build` inside `npm ci`)
   can be memory-hungry enough to fail or get OOM-killed. If that
@@ -98,33 +109,41 @@ Two more things worth doing now, before moving on:
   sudo dphys-swapfile swapon
   ```
 
-## 2. Point your domain at the Pi
+## 2. Set up Cloudflare Tunnel
 
-Caddy needs a real, publicly-resolvable domain to automatically obtain
-a Let's Encrypt certificate — it won't do this for a bare IP address.
+This replaces DNS records and router port forwarding entirely. The Pi
+initiates an outbound connection to Cloudflare; Cloudflare terminates
+public HTTPS and forwards matching requests down that connection.
 
-**If your home IP is static:** create an `A` record for your domain (or
-subdomain, e.g. `vinyl.yourdomain.com`) pointing at your public IP, at
-whatever registrar/DNS host manages the domain. Skip to the port
-forwarding step below.
+1. **Add your domain to Cloudflare.** In the Cloudflare dashboard,
+   "Add a site" → enter `michabrenner.com` → pick the Free plan.
+   Cloudflare gives you two nameservers to set at your domain's
+   registrar (wherever `michabrenner.com` is currently registered —
+   this is a registrar setting, not a Cloudflare one). This step can
+   take anywhere from a few minutes to a few hours to propagate;
+   Cloudflare emails you once it's active.
+2. **Create a tunnel.** In the Cloudflare **Zero Trust** dashboard
+   (separate from the main dashboard — there's a link to it in the
+   sidebar): **Networks → Tunnels → Create a tunnel**. Choose
+   **Cloudflared** as the connector type, give the tunnel a name (e.g.
+   `vinyl-archive`).
+3. The next screen shows an install command for various platforms —
+   ignore the install command itself (you're running this in Docker,
+   not installing `cloudflared` directly on the Pi). What you actually
+   need is the token: it's the long value after `--token` in that
+   command. Copy it.
+4. **Add a Public Hostname** for the tunnel, still in the same setup
+   flow (or under the tunnel's **Public Hostname** tab afterward):
+   - **Domain**: `michabrenner.com`
+   - **Path**: `vinyl-collection`
+   - **Type**: `HTTP`
+   - **URL**: `caddy:80`
 
-**If your home IP is dynamic** and the domain's DNS is at Porkbun, use
-the bundled `ddns-updater` service instead of updating the record by
-hand:
-
-1. In Porkbun: **Account → API Access**, create a key, and save both
-   the API key and secret key immediately — they're only shown once.
-2. In Porkbun: **Account → Domain Management → (your domain) → Details**,
-   enable **API Access** for that domain.
-3. You'll put these into `DDNS_CONFIG` in the root `.env` file in step 5
-   below. The full field reference (including wildcard/`ipv6_suffix`
-   options) is at
-   github.com/qdm12/ddns-updater/blob/master/docs/porkbun.md.
-
-**Either way**, forward ports **80** and **443** on your router to the
-Pi's local IP (the fixed one from step 1) — port 80 is needed for the
-initial certificate request (Let's Encrypt's HTTP-01 challenge), and
-both are needed for normal traffic afterward.
+   (`caddy` resolves because `cloudflared` and `caddy` share the
+   `internal` Docker network in `docker-compose.yml` — no IP address or
+   port publishing needed.)
+5. You'll paste the token from step 3 into `TUNNEL_TOKEN` in the root
+   `.env` file in step 5 below.
 
 ## 3. Install Docker on the Pi
 
@@ -157,14 +176,11 @@ cp backend/.env.docker.example backend/.env
 ```
 
 Edit the root **`.env`**:
-- `DOMAIN` — the domain from step 2.
-- `ACME_EMAIL` — required, not optional (Caddy won't start with this
-  blank — see the comment in the file).
-- `DDNS_CONFIG` — only if you're using the dynamic-IP path from step 2;
-  delete or ignore it otherwise.
+- `TUNNEL_TOKEN` — the token you copied in step 2.
 
 Edit **`backend/.env`**:
-- `FRONTEND_ORIGIN` — `https://` plus the same domain.
+- `FRONTEND_ORIGIN` — `https://michabrenner.com` (already set correctly
+  in the example — just confirm it matches your domain).
 - `ADMIN_USERNAME` — whatever you want to log into `/admin` with.
 - `ADMIN_PASSWORD_HASH` — generate this **on your own machine**
   (bcryptjs is pure JavaScript, so this works identically on Windows,
@@ -192,13 +208,6 @@ belong in your repo's `.gitignore` if you haven't added one yet.
 docker compose up -d --build
 ```
 
-Add `--profile ddns` before `up` if you're using the dynamic-DNS
-container:
-
-```bash
-docker compose --profile ddns up -d --build
-```
-
 The first build takes a while (compiling the frontend, installing
 backend dependencies, fetching Prisma's schema-engine binary — all
 need real work, and the last one needs a working internet connection,
@@ -208,35 +217,29 @@ locally).
 ## 7. Verify
 
 ```bash
-docker compose logs -f backend   # look for "Applying database migrations..." then "listening on http://localhost:3000"
-docker compose logs -f caddy     # look for certificate obtained successfully
+docker compose logs -f backend       # look for "Applying database migrations..." then "listening on http://localhost:3000"
+docker compose logs -f cloudflared   # look for "Registered tunnel connection" (no certificate messages — Cloudflare handles that)
 ```
 
-Then visit `https://<your domain>` in a browser. You should see the
-public gallery (empty carousel, since nothing's in it yet on this
-instance) and be able to reach `/admin/login`.
-
-If the site loads over plain HTTP but not HTTPS, or Caddy's logs show
-certificate errors, it's almost always DNS or port forwarding — double
-check the `A` record actually resolves to your current public IP
-(`dig +short <your domain>`) and that ports 80/443 are actually
-reaching the Pi (`curl -I http://<your domain>` from a machine outside
-your home network).
+Then visit `https://michabrenner.com/vinyl-collection/` in a browser.
+You should see the public gallery (empty carousel, since nothing's in
+it yet on this instance) and be able to reach
+`https://michabrenner.com/vinyl-collection/admin/login`.
 
 ## 8. Log in and add your first record
 
-`/admin/login` with the username/password you hashed in step 5. Add a
-record through the form as a sanity check that the whole stack — Caddy
-→ backend → SQLite → uploads volume — actually works end to end on the
-Pi, not just in a browser build.
+`/vinyl-collection/admin/login` with the username/password you hashed
+in step 5. Add a record through the form as a sanity check that the
+whole stack — Cloudflare → cloudflared → Caddy → backend → SQLite →
+uploads volume — actually works end to end on the Pi, not just in a
+browser build.
 
 ## Backups
 
 Everything that matters lives under `./data/` next to
 `docker-compose.yml`: `data/db` (the SQLite file) and `data/uploads`
-(processed scans). Caddy's own volumes (`caddy_data`/`caddy_config`)
-only hold certificates and ACME account state — not worth backing up,
-Caddy just re-obtains a certificate if they're ever lost.
+(processed scans). Neither Caddy nor cloudflared hold any state worth
+backing up separately.
 
 A simple periodic backup is enough for a personal collection:
 
@@ -276,12 +279,25 @@ automatically — no separate manual step.
   unresponsive during `docker compose up -d --build`**: likely an
   out-of-memory Docker build on a lower-RAM Pi — see the swap note in
   step 1.
-- **Caddy container fails to start with a Caddyfile parse error
-  mentioning `email`**: `ACME_EMAIL` is blank in `.env` — see step 5.
+- **`cloudflared` container keeps restarting, or `docker compose logs
+  cloudflared` shows an authentication/token error**: `TUNNEL_TOKEN` in
+  `.env` is missing, truncated, or from a deleted tunnel — re-copy it
+  from the tunnel's page in the Zero Trust dashboard.
+- **`https://michabrenner.com/vinyl-collection/` gives a Cloudflare
+  "error 1033" or similar edge error, but `cloudflared`'s own logs look
+  healthy**: check the Public Hostname rule in the tunnel's dashboard
+  (step 2.4) — domain, path, and service URL (`caddy:80`, no scheme)
+  have to match exactly, and the path must not have a leading slash in
+  that field.
+- **Page loads but assets 404, or the site loads at the wrong base
+  path**: means the frontend was built without the `--base-href
+  /vinyl-collection/` flag — check `frontend/Dockerfile` still has it,
+  then rebuild (`docker compose up -d --build caddy`).
 - **502 from Caddy right after `docker compose up`**: the backend is
   still applying migrations/starting up; give it a few seconds and
   reload. Persistent 502s mean check `docker compose logs backend`.
 - **Login works but nothing else does, or requests look blocked as
-  cross-origin**: double-check `FRONTEND_ORIGIN` in `backend/.env`
-  matches `https://<domain>` exactly (scheme included, no trailing
-  slash).
+  cross-origin**: double-check `FRONTEND_ORIGIN` in `backend/.env` is
+  exactly `https://michabrenner.com` (scheme included, no trailing
+  slash, no `/vinyl-collection` — CORS checks the origin, not the
+  path).

@@ -1,14 +1,21 @@
 # Self-hosting stack for the vinyl archive. See DEPLOYMENT.md for the
-# full setup guide (Porkbun DDNS, port forwarding, first run, backups).
+# full setup guide (Cloudflare Tunnel, first run, backups).
 #
-# Two services always run: `backend` (NestJS API, not exposed to the
-# host) and `caddy` (serves the built Angular app and reverse-proxies
-# /api/* to the backend, with automatic HTTPS for DOMAIN). A third,
-# `ddns-updater`, is opt-in via a profile — only needed if your home IP
-# isn't static:
+# Three services, always run together — there is no router configuration
+# and no host port is published anywhere in this file:
 #
-#   docker compose up -d                    # backend + caddy only
-#   docker compose --profile ddns up -d     # also runs ddns-updater
+#   backend      NestJS API, reachable only from other containers on the
+#                `internal` network.
+#   caddy        Serves the built Angular app and reverse-proxies
+#                /vinyl-collection/api/* to the backend. Not exposed to
+#                the host either — see frontend/Caddyfile.
+#   cloudflared  The only thing that talks to the outside world: it opens
+#                an outbound-only connection from this network to
+#                Cloudflare's edge and forwards tunnelled requests to
+#                caddy. Public HTTPS is terminated by Cloudflare, not by
+#                anything in this stack.
+#
+#   docker compose up -d --build
 
 services:
   backend:
@@ -27,38 +34,19 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL}
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
     networks:
       - internal
 
-  ddns-updater:
-    image: ghcr.io/qdm12/ddns-updater
-    profiles: ["ddns"]
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
     restart: unless-stopped
+    depends_on:
+      - caddy
     environment:
-      PERIOD: 5m
-      CONFIG: ${DDNS_CONFIG}
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data/ddns-updater:/updater/data
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
     networks:
       - internal
 
 networks:
   internal:
-
-volumes:
-  # Named volumes (not bind mounts) for Caddy's own state — these hold
-  # ACME account keys and issued certificates, not anything you need to
-  # browse directly or back up the same way as data/db and data/uploads.
-  caddy_data:
-  caddy_config:
