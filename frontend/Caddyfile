@@ -1,0 +1,30 @@
+# DOMAIN and ACME_EMAIL are passed in as environment variables by
+# docker-compose.yml (from the root .env file). Caddy substitutes
+# {$VAR} from its own process environment automatically. Both must be
+# set in .env — an empty ACME_EMAIL leaves `email` with no argument
+# below, which Caddy refuses to start on.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# The frontend's production environment.ts uses apiUrl: '/api', so
+	# every API/uploads call the app makes is under this prefix.
+	# handle_path strips the /api prefix before proxying — the backend's
+	# own routes (/vinyls, /artists, /auth, /uploads) are mounted at
+	# root, not under /api (see architecture-and-data-model.md).
+	handle_path /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Everything else: the Angular SPA. try_files falls back to
+	# index.html for any path that isn't a real static file, so
+	# client-side routes (e.g. /vinyl/12) work on a hard refresh too.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

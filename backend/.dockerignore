@@ -1,0 +1,13 @@
+node_modules
+dist
+generated
+test
+coverage
+*.db
+*.db-journal
+.env
+.env.*
+!.env.example
+!.env.docker.example
+uploads
+npm-debug.log*

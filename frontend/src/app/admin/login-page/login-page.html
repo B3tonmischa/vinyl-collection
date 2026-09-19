@@ -1,0 +1,46 @@
+<div class="flex min-h-dvh items-center justify-center bg-neutral-50 px-4">
+  <form
+    (submit)="$event.preventDefault(); onSubmit()"
+    class="w-full max-w-sm space-y-4 rounded-lg bg-white p-6 shadow-sm"
+  >
+    <h1 class="text-lg font-semibold text-neutral-900">Admin sign in</h1>
+
+    @if (error()) {
+      <p class="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{{ error() }}</p>
+    }
+
+    <label class="block">
+      <span class="text-sm font-medium text-neutral-700">Username</span>
+      <input
+        type="text"
+        autocomplete="username"
+        class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-neutral-500 focus:outline-none"
+        [value]="username()"
+        (input)="username.set($any($event.target).value)"
+      />
+    </label>
+
+    <label class="block">
+      <span class="text-sm font-medium text-neutral-700">Password</span>
+      <input
+        type="password"
+        autocomplete="current-password"
+        class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-neutral-500 focus:outline-none"
+        [value]="password()"
+        (input)="password.set($any($event.target).value)"
+      />
+    </label>
+
+    <button
+      type="submit"
+      [disabled]="submitting()"
+      class="w-full rounded bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+    >
+      {{ submitting() ? 'Signing in…' : 'Sign in' }}
+    </button>
+
+    <a routerLink="/" class="block text-center text-sm text-neutral-500 hover:text-neutral-800">
+      ← Back to collection
+    </a>
+  </form>
+</div>

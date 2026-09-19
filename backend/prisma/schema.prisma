@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum ReleaseType {
+  LP
+  EP
+  SINGLE
+  COMPILATION
+  BOX_SET
+}
+
+enum DiscSize {
+  SEVEN_INCH
+  TEN_INCH
+  TWELVE_INCH
+}
+
+enum Speed {
+  RPM_33
+  RPM_45
+  RPM_78
+}
+
+enum ImageKind {
+  COVER_FRONT
+  COVER_BACK
+  INNER_SLEEVE
+  DISC_SIDE_A
+  DISC_SIDE_B
+}
+
+model Vinyl {
+  id            Int           @id @default(autoincrement())
+  title         String
+  year          Int?
+  label         String?
+  catalogNumber String?
+  // format, split into three independent, optional facets (see architecture-review-implementation-plan.md #2).
+  releaseType   ReleaseType?
+  discSize      DiscSize?
+  speed         Speed?
+  genre         String?
+  notes         String?
+  artists       VinylArtist[]
+  tracks        Track[]
+  images        VinylImage[]
+  // Soft delete: a "delete" sets this instead of removing the row. All read
+  // queries (list, detail, search, image serving) filter deletedAt: null.
+  deletedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([title])
+}
+
+model Artist {
+  id     Int           @id @default(autoincrement())
+  // Uniqueness is enforced here at the DB level; SQLite's UNIQUE is
+  // case-sensitive, so case-insensitive dedup (e.g. "did you mean an
+  // existing artist?") is handled in application logic, not the schema.
+  name   String        @unique
+  vinyls VinylArtist[]
+  tracks TrackArtist[]
+}
+
+// Vinyl <-> Artist, many-to-many: the album's primary artist(s).
+model VinylArtist {
+  vinyl    Vinyl  @relation(fields: [vinylId], references: [id], onDelete: Cascade)
+  vinylId  Int
+  artist   Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  artistId Int
+
+  @@id([vinylId, artistId])
+  @@index([artistId])
+}
+
+model Track {
+  id       Int           @id @default(autoincrement())
+  vinyl    Vinyl         @relation(fields: [vinylId], references: [id], onDelete: Cascade)
+  vinylId  Int
+  position Int
+  title    String
+  // e.g. "A", "B", "C"... — letters continue across discs, so this is
+  // deliberately not paired with a discNumber field (see plan doc #3).
+  side     String?
+  // Empty = inherits Vinyl's artists; one or more rows = override that
+  // replaces (not adds to) the inherited set entirely.
+  artists  TrackArtist[]
+
+  @@index([vinylId])
+}
+
+// Track <-> Artist override, many-to-many.
+model TrackArtist {
+  track    Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  trackId  Int
+  artist   Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  artistId Int
+
+  @@id([trackId, artistId])
+  @@index([artistId])
+}
+
+model VinylImage {
+  id         Int       @id @default(autoincrement())
+  kind       ImageKind
+  // Default 1 for packaging-level kinds (COVER_FRONT/COVER_BACK/INNER_SLEEVE),
+  // which stay single regardless of disc count; varies for DISC_SIDE_A/B on
+  // multi-disc releases.
+  discNumber Int       @default(1)
+  // Paths are relative to the /uploads static root, e.g. "12/cover-front-full.webp"
+  fullPath   String
+  thumbPath  String
+  vinyl      Vinyl     @relation(fields: [vinylId], references: [id], onDelete: Cascade)
+  vinylId    Int
+  // Soft delete, same semantics as Vinyl.deletedAt.
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  // One image per kind per disc per vinyl — uploading again replaces it.
+  @@unique([vinylId, kind, discNumber])
+}

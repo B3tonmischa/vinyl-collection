@@ -1,0 +1,60 @@
+{
+  "name": "vinyl-archive-backend",
+  "version": "0.1.0",
+  "description": "Backend API for the vinyl collection archive",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "hash:password": "node scripts/hash-password.js",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/mapped-types": "^2.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@prisma/adapter-better-sqlite3": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "bcryptjs": "^2.4.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.5",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.20.3",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.1",
+    "prisma": "^7.0.0",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

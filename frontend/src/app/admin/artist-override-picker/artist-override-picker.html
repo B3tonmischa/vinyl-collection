@@ -1,0 +1,46 @@
+<div class="space-y-2">
+  <div class="flex flex-wrap items-center gap-3">
+    @for (artist of albumArtists; track artist.id) {
+      <label class="flex items-center gap-1.5 text-sm text-neutral-700">
+        <input
+          type="checkbox"
+          class="rounded border-neutral-300"
+          [checked]="isChecked(artist)"
+          (change)="toggle.emit(artist)"
+        />
+        {{ artist.name }}
+      </label>
+    }
+    @for (guest of guestArtists; track guest.id) {
+      <span class="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-sm text-amber-800">
+        {{ guest.name }}
+        <button
+          type="button"
+          (click)="toggle.emit(guest)"
+          class="text-amber-500 hover:text-amber-700"
+          [attr.aria-label]="'Remove ' + guest.name"
+        >
+          ✕
+        </button>
+      </span>
+    }
+    @if (dirty) {
+      <button
+        type="button"
+        (click)="resetToInherit.emit()"
+        class="text-xs text-neutral-500 underline hover:text-neutral-800"
+      >
+        Reset to inherit
+      </button>
+    }
+  </div>
+
+  <app-combobox
+    placeholder="Add a guest artist…"
+    [options]="comboboxOptions"
+    [loading]="searchResource.isLoading()"
+    (queryChange)="onQueryChange($event)"
+    (optionSelected)="onOptionSelected($event)"
+    (createRequested)="onCreateRequested($event)"
+  />
+</div>

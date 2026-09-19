@@ -1,0 +1,43 @@
+@if (detailResource.isLoading() && !detailResource.hasValue()) {
+  <div class="flex h-64 items-center justify-center text-neutral-400">Loading…</div>
+} @else if (detailResource.error()) {
+  <div class="flex h-64 flex-col items-center justify-center gap-2 text-red-500">
+    <p>Couldn't load this record.</p>
+    <a routerLink="/" class="text-sm text-neutral-500 underline hover:text-neutral-800">Back to collection</a>
+  </div>
+} @else if (detailResource.value(); as vinyl) {
+  <div class="mx-auto max-w-3xl px-4 py-8">
+    <a routerLink="/" class="text-sm text-neutral-500 hover:text-neutral-800">← Back to collection</a>
+
+    <div class="mt-4">
+      <app-disc-gallery [vinylId]="vinyl.id" [images]="vinyl.images" />
+    </div>
+
+    <header class="mt-6">
+      <h1 class="text-2xl font-semibold text-neutral-900">{{ vinyl.title }}</h1>
+      <p class="mt-1 text-neutral-600">
+        {{ artistNames(vinyl) || 'Unknown artist' }}
+        @if (vinyl.year) {
+          <span> · {{ vinyl.year }}</span>
+        }
+      </p>
+      @if (metaLine(vinyl)) {
+        <p class="mt-1 text-sm text-neutral-400">{{ metaLine(vinyl) }}</p>
+      }
+      @if (vinyl.notes) {
+        <p class="mt-3 whitespace-pre-line text-sm text-neutral-700">{{ vinyl.notes }}</p>
+      }
+    </header>
+
+    @if (vinyl.tracks.length > 0) {
+      <section class="mt-8">
+        <app-tracklist [tracks]="vinyl.tracks" [albumArtists]="vinyl.artists" />
+      </section>
+    }
+  </div>
+} @else {
+  <div class="flex h-64 flex-col items-center justify-center gap-2 text-neutral-400">
+    <p>Record not found.</p>
+    <a routerLink="/" class="text-sm underline hover:text-neutral-800">Back to collection</a>
+  </div>
+}

@@ -1,0 +1,22 @@
+<div class="space-y-6">
+  @for (group of sides; track group.side) {
+    <div>
+      <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+        Side {{ group.side }}
+      </h3>
+      <ol class="divide-y divide-neutral-100">
+        @for (track of group.tracks; track track.id) {
+          <li class="flex items-baseline justify-between gap-4 py-2">
+            <div class="min-w-0">
+              <span class="mr-2 text-sm tabular-nums text-neutral-400">{{ track.position }}</span>
+              <span class="text-sm text-neutral-900">{{ track.title }}</span>
+            </div>
+            @if (differsFromAlbum(track)) {
+              <span class="shrink-0 text-xs text-neutral-500">{{ artistNames(track.effectiveArtists) }}</span>
+            }
+          </li>
+        }
+      </ol>
+    </div>
+  }
+</div>

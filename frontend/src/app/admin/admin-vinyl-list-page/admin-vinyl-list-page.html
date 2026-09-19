@@ -1,0 +1,37 @@
+<div class="mx-auto max-w-4xl">
+  <h1 class="mb-4 text-xl font-semibold text-neutral-900">Your collection</h1>
+
+  @if (listResource.isLoading() && !listResource.hasValue()) {
+    <p class="text-neutral-400">Loading…</p>
+  } @else if (listResource.error()) {
+    <p class="text-red-500">Couldn't load your collection.</p>
+  } @else {
+    <div class="divide-y divide-neutral-200 rounded-lg bg-white shadow-sm">
+      @for (vinyl of listResource.value(); track vinyl.id) {
+        <div class="flex items-center gap-4 px-4 py-3">
+          <div class="h-12 w-12 shrink-0 overflow-hidden rounded bg-neutral-100">
+            @if (coverUrl(vinyl); as url) {
+              <img [src]="url" [alt]="vinyl.title" class="h-full w-full object-cover" />
+            }
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-neutral-900">{{ vinyl.title }}</p>
+            <p class="truncate text-xs text-neutral-500">{{ artistNames(vinyl) }}</p>
+          </div>
+          <a [routerLink]="['/admin', vinyl.id, 'edit']" class="text-sm text-neutral-600 hover:text-neutral-900">
+            Edit
+          </a>
+          <button
+            type="button"
+            (click)="confirmDelete(vinyl)"
+            class="text-sm text-red-600 hover:text-red-800"
+          >
+            Delete
+          </button>
+        </div>
+      } @empty {
+        <p class="px-4 py-8 text-center text-sm text-neutral-400">No records yet.</p>
+      }
+    </div>
+  }
+</div>

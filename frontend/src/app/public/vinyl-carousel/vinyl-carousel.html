@@ -1,0 +1,39 @@
+<div class="flex h-full flex-col">
+  <div
+    class="flex min-h-0 flex-1 select-none items-center justify-center gap-3 overflow-hidden px-4"
+    (pointerdown)="onPointerDown($event)"
+    (pointerup)="onPointerUp($event)"
+  >
+    @for (item of windowCards(); track item.index) {
+      <button
+        type="button"
+        class="shrink-0 cursor-pointer transition-all duration-300 ease-out"
+        [class]="cardSizeClass(item.offset)"
+        (click)="onCardClick(item)"
+      >
+        <app-vinyl-card [vinyl]="item.vinyl" />
+      </button>
+    } @empty {
+      <p class="text-sm text-neutral-400">Your collection is empty — add your first record from the admin panel.</p>
+    }
+  </div>
+
+  <div class="flex shrink-0 justify-center gap-4 py-3">
+    <button
+      type="button"
+      (click)="prev()"
+      aria-label="Previous record"
+      class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-600 shadow hover:bg-neutral-50"
+    >
+      ‹
+    </button>
+    <button
+      type="button"
+      (click)="next()"
+      aria-label="Next record"
+      class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-600 shadow hover:bg-neutral-50"
+    >
+      ›
+    </button>
+  </div>
+</div>

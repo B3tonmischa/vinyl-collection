@@ -1,0 +1,45 @@
+<div class="space-y-6">
+  @if (packagingImages.length > 0) {
+    <div class="flex flex-wrap gap-3">
+      @for (image of packagingImages; track image.id) {
+        <img
+          [src]="thumbUrl(image)"
+          [alt]="image.kind"
+          class="h-28 w-28 rounded object-cover shadow-sm"
+        />
+      }
+    </div>
+  }
+
+  @if (discTabs.length > 0) {
+    <div>
+      <div class="mb-3 flex gap-2 border-b border-neutral-200">
+        @for (tab of discTabs; track tab.id; let i = $index) {
+          <button
+            type="button"
+            class="border-b-2 px-3 py-1.5 text-sm"
+            [class]="
+              i === activeTabIndex()
+                ? 'border-neutral-900 font-medium text-neutral-900'
+                : 'border-transparent text-neutral-500 hover:text-neutral-700'
+            "
+            (click)="activeTabIndex.set(i)"
+          >
+            {{ tabLabel(tab) }}
+          </button>
+        }
+      </div>
+      @if (discTabs[activeTabIndex()]; as active) {
+        <img
+          [src]="imageUrl(active)"
+          [alt]="tabLabel(active)"
+          class="max-h-96 w-full rounded bg-neutral-100 object-contain"
+        />
+      }
+    </div>
+  }
+
+  @if (packagingImages.length === 0 && discTabs.length === 0) {
+    <p class="text-sm text-neutral-400">No images yet.</p>
+  }
+</div>

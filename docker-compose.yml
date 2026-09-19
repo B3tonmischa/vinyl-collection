@@ -1,0 +1,64 @@
+# Self-hosting stack for the vinyl archive. See DEPLOYMENT.md for the
+# full setup guide (Porkbun DDNS, port forwarding, first run, backups).
+#
+# Two services always run: `backend` (NestJS API, not exposed to the
+# host) and `caddy` (serves the built Angular app and reverse-proxies
+# /api/* to the backend, with automatic HTTPS for DOMAIN). A third,
+# `ddns-updater`, is opt-in via a profile — only needed if your home IP
+# isn't static:
+#
+#   docker compose up -d                    # backend + caddy only
+#   docker compose --profile ddns up -d     # also runs ddns-updater
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./data/db:/data/db
+      - ./data/uploads:/data/uploads
+    networks:
+      - internal
+
+  caddy:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+  ddns-updater:
+    image: ghcr.io/qdm12/ddns-updater
+    profiles: ["ddns"]
+    restart: unless-stopped
+    environment:
+      PERIOD: 5m
+      CONFIG: ${DDNS_CONFIG}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/ddns-updater:/updater/data
+    networks:
+      - internal
+
+networks:
+  internal:
+
+volumes:
+  # Named volumes (not bind mounts) for Caddy's own state — these hold
+  # ACME account keys and issued certificates, not anything you need to
+  # browse directly or back up the same way as data/db and data/uploads.
+  caddy_data:
+  caddy_config:

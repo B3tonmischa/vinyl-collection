@@ -1,0 +1,88 @@
+<div class="space-y-4">
+  <div>
+    <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Packaging</h3>
+    <div class="flex flex-wrap gap-4">
+      @for (slot of packagingSlots; track slot.kind) {
+        <div class="w-28">
+          <div class="aspect-square overflow-hidden rounded bg-neutral-100">
+            @if (imageFor(slot); as image) {
+              <img
+                [src]="apiConfig.uploadUrl(vinylId, image.thumbPath)"
+                [alt]="slot.label"
+                class="h-full w-full object-cover"
+              />
+            }
+          </div>
+          <p class="mt-1 truncate text-xs text-neutral-500">{{ slot.label }}</p>
+          <div class="mt-1 flex gap-2 text-xs">
+            <label class="cursor-pointer text-neutral-600 underline hover:text-neutral-900">
+              {{ imageFor(slot) ? 'Replace' : 'Upload' }}
+              <input
+                type="file"
+                accept="image/*"
+                class="hidden"
+                [disabled]="isBusy(slot)"
+                (change)="onFileSelected(slot, $any($event.target))"
+              />
+            </label>
+            @if (imageFor(slot)) {
+              <button
+                type="button"
+                [disabled]="isBusy(slot)"
+                (click)="deleteImage(slot)"
+                class="text-red-500 hover:text-red-700"
+              >
+                Delete
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div>
+    <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Disc scans</h3>
+    <div class="flex flex-wrap gap-4">
+      @for (slot of discSlots; track slotKey(slot)) {
+        <div class="w-28">
+          <div class="aspect-square overflow-hidden rounded bg-neutral-100">
+            @if (imageFor(slot); as image) {
+              <img
+                [src]="apiConfig.uploadUrl(vinylId, image.thumbPath)"
+                [alt]="slot.label"
+                class="h-full w-full object-cover"
+              />
+            }
+          </div>
+          <p class="mt-1 truncate text-xs text-neutral-500">{{ slot.label }}</p>
+          <div class="mt-1 flex gap-2 text-xs">
+            <label class="cursor-pointer text-neutral-600 underline hover:text-neutral-900">
+              {{ imageFor(slot) ? 'Replace' : 'Upload' }}
+              <input
+                type="file"
+                accept="image/*"
+                class="hidden"
+                [disabled]="isBusy(slot)"
+                (change)="onFileSelected(slot, $any($event.target))"
+              />
+            </label>
+            @if (imageFor(slot)) {
+              <button
+                type="button"
+                [disabled]="isBusy(slot)"
+                (click)="deleteImage(slot)"
+                class="text-red-500 hover:text-red-700"
+              >
+                Delete
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+    <button type="button" (click)="addDisc()" class="mt-2 text-xs text-neutral-500 underline hover:text-neutral-800">
+      + Add another disc
+    </button>
+  </div>
+</div>

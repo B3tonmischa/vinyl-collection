@@ -1,0 +1,154 @@
+<div class="mx-auto max-w-2xl pb-16">
+  <a routerLink="/admin" class="text-sm text-neutral-500 hover:text-neutral-800">← Back to list</a>
+  <h1 class="mt-2 text-xl font-semibold text-neutral-900">
+    {{ isEdit() ? 'Edit record' : 'New record' }}
+  </h1>
+
+  @if (isEdit() && detailResource.isLoading() && !detailResource.hasValue()) {
+    <p class="mt-4 text-neutral-400">Loading…</p>
+  } @else {
+    <form (submit)="$event.preventDefault(); onSubmit()" class="mt-6 space-y-6">
+      <div class="grid grid-cols-2 gap-4">
+        <label class="col-span-2 block">
+          <span class="text-sm font-medium text-neutral-700">Title</span>
+          <input
+            type="text"
+            required
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="title()"
+            (input)="title.set($any($event.target).value)"
+          />
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Year</span>
+          <input
+            type="number"
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="year() ?? ''"
+            (input)="year.set($any($event.target).value ? +$any($event.target).value : null)"
+          />
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Genre</span>
+          <input
+            type="text"
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="genre()"
+            (input)="genre.set($any($event.target).value)"
+          />
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Label</span>
+          <input
+            type="text"
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="label()"
+            (input)="label.set($any($event.target).value)"
+          />
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Catalog number</span>
+          <input
+            type="text"
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="catalogNumber()"
+            (input)="catalogNumber.set($any($event.target).value)"
+          />
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Release type</span>
+          <select
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="releaseType()"
+            (change)="releaseType.set($any($event.target).value)"
+          >
+            <option value="">—</option>
+            @for (rt of releaseTypes; track rt) {
+              <option [value]="rt">{{ releaseTypeLabels[rt] }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Disc size</span>
+          <select
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="discSize()"
+            (change)="discSize.set($any($event.target).value)"
+          >
+            <option value="">—</option>
+            @for (ds of discSizes; track ds) {
+              <option [value]="ds">{{ discSizeLabels[ds] }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-neutral-700">Speed</span>
+          <select
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="speed()"
+            (change)="speed.set($any($event.target).value)"
+          >
+            <option value="">—</option>
+            @for (s of speeds; track s) {
+              <option [value]="s">{{ speedLabels[s] }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="col-span-2 block">
+          <span class="text-sm font-medium text-neutral-700">Notes</span>
+          <textarea
+            rows="3"
+            class="mt-1 w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            [value]="notes()"
+            (input)="notes.set($any($event.target).value)"
+          ></textarea>
+        </label>
+      </div>
+
+      <div>
+        <h2 class="mb-2 text-sm font-medium text-neutral-700">Artists</h2>
+        <app-artist-picker [selected]="artists()" (selectedChange)="artists.set($event)" />
+      </div>
+
+      <div>
+        <h2 class="mb-2 text-sm font-medium text-neutral-700">Tracklist</h2>
+        <app-track-list-editor
+          [rows]="trackRows()"
+          [albumArtists]="artists()"
+          (rowsChange)="trackRows.set($event)"
+        />
+      </div>
+
+      <div>
+        <h2 class="mb-2 text-sm font-medium text-neutral-700">Images</h2>
+        @if (isEdit()) {
+          @if (detailResource.value(); as vinyl) {
+            <app-image-upload-panel
+              [vinylId]="vinyl.id"
+              [images]="vinyl.images"
+              (imagesChanged)="onImagesChanged()"
+            />
+          }
+        } @else {
+          <p class="text-sm text-neutral-400">Save the record first to add images.</p>
+        }
+      </div>
+
+      <button
+        type="submit"
+        [disabled]="saving() || !title().trim()"
+        class="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+      >
+        {{ saving() ? 'Saving…' : 'Save' }}
+      </button>
+    </form>
+  }
+</div>
