@@ -46,7 +46,11 @@ ENV NODE_ENV=production
 # becomes a real constraint.
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/generated ./generated
+# Not /app/generated — that's uncompiled .ts source. The Prisma client
+# actually used at runtime is the compiled copy under dist/generated
+# (see docker-entrypoint.sh's comment on dist/src/main), because
+# generated/ sits outside src/ and gets compiled into dist alongside
+# it. Copying the raw source separately here was dead weight.
 COPY package.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./

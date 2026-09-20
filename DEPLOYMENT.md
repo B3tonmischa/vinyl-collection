@@ -137,7 +137,10 @@ public HTTPS and forwards matching requests down that connection.
    - **Domain**: `michabrenner.com`
    - **Path**: `vinyl-collection`
    - **Type**: `HTTP`
-   - **URL**: `caddy:80`
+   - **URL**: `http://caddy:80` (the dashboard's URL field wants the
+     full scheme included, even though the **Type** dropdown above it
+     already says HTTP — a bare `caddy:80` gets rejected with "Invalid
+     service URL format")
 
    (`caddy` resolves because `cloudflared` and `caddy` share the
    `internal` Docker network in `docker-compose.yml` — no IP address or
@@ -309,9 +312,9 @@ automatically — no separate manual step.
 - **`https://michabrenner.com/vinyl-collection/` gives a Cloudflare
   "error 1033" or similar edge error, but `cloudflared`'s own logs look
   healthy**: check the Public Hostname rule in the tunnel's dashboard
-  (step 2.4) — domain, path, and service URL (`caddy:80`, no scheme)
-  have to match exactly, and the path must not have a leading slash in
-  that field.
+  (step 2.4) — domain, path, and service URL (`http://caddy:80`,
+  scheme included) have to match exactly, and the path must not have a
+  leading slash in that field.
 - **Page loads but assets 404, or the site loads at the wrong base
   path**: means the frontend was built without the `--base-href
   /vinyl-collection/` flag — check `frontend/Dockerfile` still has it,

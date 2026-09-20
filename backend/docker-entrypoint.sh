@@ -9,4 +9,10 @@ echo "Applying database migrations..."
 npx prisma migrate deploy
 
 echo "Starting server..."
-exec node dist/main
+# The compiled entry point is dist/src/main.js, not dist/main.js: the
+# Prisma client at backend/generated/prisma is real .ts source that has
+# to be compiled alongside src/ (see prisma.service.ts's import), and
+# since it lives outside src/, tsc's rootDir spans the whole backend/
+# directory (pinned explicitly in tsconfig.build.json) rather than just
+# src/ — so the output mirrors that: dist/src/... and dist/generated/....
+exec node dist/src/main
