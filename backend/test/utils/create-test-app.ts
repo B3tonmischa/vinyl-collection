@@ -1,6 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
 import cookieParser from 'cookie-parser';
@@ -65,7 +65,13 @@ export interface TestAppContext {
  * directory. Each call gets its own db + uploads dir so test files never
  * see each other's data.
  */
-export async function createTestApp(): Promise<TestAppContext> {
+export async function createTestApp(
+  // Optional hook to override providers before the module compiles —
+  // e.g. swapping DiscogsClient for a fake in test/import.e2e-spec.ts so
+  // those tests never make a real network call. Every other test file
+  // omits this and gets the exact same app it always did.
+  configure?: (builder: TestingModuleBuilder) => TestingModuleBuilder,
+): Promise<TestAppContext> {
   counter += 1;
   if (!existsSync(TMP_ROOT)) {
     mkdirSync(TMP_ROOT, { recursive: true });
@@ -87,9 +93,13 @@ export async function createTestApp(): Promise<TestAppContext> {
   process.env.JWT_EXPIRES_IN = '1h';
   process.env.FRONTEND_ORIGIN = 'http://localhost:4200';
 
-  const moduleRef = await Test.createTestingModule({
+  let builder = Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  });
+  if (configure) {
+    builder = configure(builder);
+  }
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   app.use(cookieParser());

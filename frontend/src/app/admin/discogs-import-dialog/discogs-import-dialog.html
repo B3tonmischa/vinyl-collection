@@ -1,0 +1,101 @@
+<div class="w-[32rem] max-w-[90vw] rounded-lg bg-white p-5 shadow-xl">
+  <h2 class="text-base font-semibold text-neutral-900">Import from Discogs</h2>
+
+  <form class="mt-3 grid grid-cols-2 gap-2" (ngSubmit)="search()">
+    <input
+      type="text"
+      placeholder="Barcode"
+      class="col-span-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+      [ngModel]="barcode()"
+      (ngModelChange)="barcode.set($event)"
+      name="barcode"
+    />
+    <input
+      type="text"
+      placeholder="Catalog number"
+      class="col-span-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+      [ngModel]="catno()"
+      (ngModelChange)="catno.set($event)"
+      name="catno"
+    />
+    <input
+      type="text"
+      placeholder="Artist"
+      class="col-span-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+      [ngModel]="artist()"
+      (ngModelChange)="artist.set($event)"
+      name="artist"
+    />
+    <input
+      type="text"
+      placeholder="Title"
+      class="col-span-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+      [ngModel]="title()"
+      (ngModelChange)="title.set($event)"
+      name="title"
+    />
+    <div class="col-span-2 flex justify-end gap-2">
+      <button
+        type="button"
+        class="rounded px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100"
+        (click)="cancel()"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        [disabled]="!canSearch || searching()"
+        class="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+      >
+        {{ searching() ? 'Searching…' : 'Search' }}
+      </button>
+    </div>
+  </form>
+
+  @if (error()) {
+    <p class="mt-3 text-sm text-red-600">{{ error() }}</p>
+  }
+
+  @if (searched()) {
+    <div class="mt-4 max-h-80 divide-y divide-neutral-200 overflow-y-auto rounded border border-neutral-200">
+      @for (candidate of results(); track candidate.discogsReleaseId) {
+        <button
+          type="button"
+          [disabled]="importing()"
+          (click)="pick(candidate)"
+          class="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-neutral-50 disabled:opacity-50"
+        >
+          <div class="h-10 w-10 shrink-0 overflow-hidden rounded bg-neutral-100">
+            @if (candidate.thumbnailUrl) {
+              <img [src]="candidate.thumbnailUrl" alt="" class="h-full w-full object-cover" />
+            }
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-neutral-900">{{ candidate.title }}</p>
+            <p class="truncate text-xs text-neutral-500">
+              {{ candidate.year ?? '—' }} · {{ candidate.formats.join(', ') || '—' }}
+              @if (candidate.country) {
+                · {{ candidate.country }}
+              }
+              @if (candidate.catalogNumber) {
+                · {{ candidate.catalogNumber }}
+              }
+            </p>
+          </div>
+        </button>
+      } @empty {
+        <p class="px-3 py-6 text-center text-sm text-neutral-400">No matches on Discogs.</p>
+      }
+    </div>
+  }
+
+  @if (importing()) {
+    <p class="mt-3 text-sm text-neutral-500">Importing…</p>
+  }
+
+  <p class="mt-4 text-[11px] text-neutral-400">
+    Data provided by
+    <a href="https://www.discogs.com" target="_blank" rel="noopener" class="underline">Discogs</a>.
+    This project is not affiliated with or endorsed by Discogs.
+  </p>
+</div>

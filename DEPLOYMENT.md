@@ -278,19 +278,44 @@ automatically — no separate manual step.
   the SSH session and reconnect. Confirm with `groups` — it should
   list `docker`.
 - **A `WARN` about some unrelated-looking variable name "not set,
-  defaulting to a blank string"** when running `docker compose up`:
-  Compose treats an unescaped `$` inside any `.env` value as the start
-  of a variable reference (`$foo` or `${foo}`) and substitutes it —
-  this is Compose's own interpolation, not something specific to this
-  project. Check `.env` for a stray `$` in `TUNNEL_TOKEN` (shouldn't be
-  one in a real Cloudflare token, but worth eliminating) or anywhere
-  else in the file; a literal `$` you actually want kept needs to be
-  escaped as `$$`. After fixing, `docker compose config` prints the
-  fully resolved compose file with variables substituted — useful to
-  confirm `TUNNEL_TOKEN` actually resolved to your real token and not
-  an empty string (that command prints the real token to your
-  terminal, so don't paste its output anywhere outside your own
-  machine).
+  defaulting to a blank string"** when running `docker compose up`,
+  **and login fails no matter what password you use**: Compose treats
+  an unescaped `$` inside an env file's value as the start of a
+  variable reference (`$foo` or `${foo}`) and silently substitutes an
+  empty string when nothing by that name is set — and it does this to
+  `backend/.env` too (loaded via `env_file:`), not just the root
+  `.env`. `ADMIN_PASSWORD_HASH` is a bcrypt hash, which always contains
+  three literal `$` characters (`$2b$10$<53 more characters>`) —
+  without escaping, Compose mangles part of it before it ever reaches
+  the container, so bcrypt's comparison fails for every login attempt
+  even with the correct password, and there's no error that points at
+  this directly.
+
+  **Fix**: in `backend/.env`, double every `$` in `ADMIN_PASSWORD_HASH`
+  so each one reads `$$` instead of `$` — e.g. `$2b$10$abc...` becomes
+  `$$2b$$10$$abc...`. This is Compose's standard "keep this literal"
+  escape, and it applies to *any* secret placed in an env file that
+  happens to contain a `$` (a hand-typed `JWT_SECRET` could in
+  principle hit the same issue, though `openssl rand -hex` output
+  never will, since hex has no `$`).
+
+  After editing, recreate the container so the corrected value is
+  actually picked up — a plain `docker compose restart` does **not**
+  re-read `env_file`, you need:
+  ```bash
+  docker compose up -d backend
+  ```
+  Then confirm the fix actually landed, by checking what the running
+  container sees:
+  ```bash
+  docker compose exec backend printenv ADMIN_PASSWORD_HASH
+  ```
+  This should print the *original*, correctly-formatted hash with
+  single `$` characters (60 characters total, starting with `$2b$`,
+  `$2a$`, or `$2y$`) — Compose's interpolation turns your `$$` back
+  into a literal `$` once it's satisfied there's no variable to
+  substitute, so the escaped file and the working container value
+  look different from each other on purpose.
 - **Backend container keeps restarting, logs show a migration/network
   error reaching `binaries.prisma.sh`**: this is the same Prisma 7 CLI
   behavior documented in `claude/architecture-and-data-model.md` — the

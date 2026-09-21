@@ -7,6 +7,7 @@ import { VinylsModule } from './vinyls/vinyls.module';
 import { AuthModule } from './auth/auth.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ArtistsModule } from './artists/artists.module';
+import { ImportModule } from './import/import.module';
 import { AuthGuard } from './auth/auth.guard';
 
 @Module({
@@ -17,6 +18,7 @@ import { AuthGuard } from './auth/auth.guard';
     VinylsModule,
     UploadsModule,
     ArtistsModule,
+    ImportModule,
   ],
   controllers: [AppController],
   providers: [
