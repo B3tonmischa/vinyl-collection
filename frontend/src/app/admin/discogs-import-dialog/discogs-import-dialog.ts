@@ -28,10 +28,10 @@ export class DiscogsImportDialogComponent {
   private readonly discogsApi = inject(DiscogsImportApiService);
   private readonly dialogRef = inject(DialogRef<ImportedVinyl | undefined>);
 
-  protected readonly barcode = signal('');
-  protected readonly catno = signal('');
   protected readonly artist = signal('');
   protected readonly title = signal('');
+  protected readonly barcode = signal('');
+  protected readonly catno = signal('');
 
   protected readonly searching = signal(false);
   protected readonly importing = signal(false);
@@ -41,10 +41,10 @@ export class DiscogsImportDialogComponent {
 
   protected get canSearch(): boolean {
     return !!(
-      this.barcode().trim() ||
-      this.catno().trim() ||
       this.artist().trim() ||
-      this.title().trim()
+      this.title().trim() ||
+      this.barcode().trim() ||
+      this.catno().trim()
     );
   }
 
@@ -54,10 +54,10 @@ export class DiscogsImportDialogComponent {
     this.error.set(null);
     try {
       const results = await this.discogsApi.search({
-        barcode: this.barcode().trim() || undefined,
-        catno: this.catno().trim() || undefined,
         artist: this.artist().trim() || undefined,
         title: this.title().trim() || undefined,
+        barcode: this.barcode().trim() || undefined,
+        catno: this.catno().trim() || undefined,
       });
       this.results.set(results);
       this.searched.set(true);
