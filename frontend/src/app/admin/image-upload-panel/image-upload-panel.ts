@@ -35,6 +35,10 @@ export class ImageUploadPanel {
   protected readonly busyKey = signal<string | null>(null);
   private readonly extraDiscs = signal(0);
 
+  protected readonly swapMode = signal(false);
+  protected readonly swapSelection = signal<ImageSlot[]>([]);
+  protected readonly swapping = signal(false);
+
   protected readonly packagingSlots = PACKAGING_SLOTS;
 
   protected get discCount(): number {
@@ -111,6 +115,52 @@ export class ImageUploadPanel {
       this.toast.show(`Couldn't delete ${slot.label}.`);
     } finally {
       this.busyKey.set(null);
+    }
+  }
+
+  protected toggleSwapMode(): void {
+    this.swapMode.update((active) => !active);
+    this.swapSelection.set([]);
+  }
+
+  protected isSwapSelected(slot: ImageSlot): boolean {
+    return this.swapSelection().some((s) => this.slotKey(s) === this.slotKey(slot));
+  }
+
+  protected toggleSwapSelection(slot: ImageSlot): void {
+    if (!this.swapMode() || !this.imageFor(slot)) return;
+    const key = this.slotKey(slot);
+    const current = this.swapSelection();
+    if (current.some((s) => this.slotKey(s) === key)) {
+      this.swapSelection.set(current.filter((s) => this.slotKey(s) !== key));
+      return;
+    }
+    if (current.length >= 2) return;
+    this.swapSelection.set([...current, slot]);
+  }
+
+  protected cancelSwapSelection(): void {
+    this.swapSelection.set([]);
+  }
+
+  protected async confirmSwap(): Promise<void> {
+    const [a, b] = this.swapSelection();
+    if (!a || !b) return;
+    this.swapping.set(true);
+    try {
+      await this.uploadsApi.swap(
+        this.vinylId,
+        { kind: a.kind, discNumber: a.discNumber },
+        { kind: b.kind, discNumber: b.discNumber },
+      );
+      this.toast.show(`Swapped ${a.label} and ${b.label}.`);
+      this.imagesChanged.emit();
+      this.swapSelection.set([]);
+      this.swapMode.set(false);
+    } catch {
+      this.toast.show(`Couldn't swap ${a.label} and ${b.label}.`);
+    } finally {
+      this.swapping.set(false);
     }
   }
 }
