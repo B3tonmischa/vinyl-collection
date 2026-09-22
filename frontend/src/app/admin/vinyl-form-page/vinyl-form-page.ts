@@ -64,15 +64,19 @@ export class VinylFormPage {
   protected readonly speedLabels = SPEED_LABELS;
 
   protected readonly saving = signal(false);
-  private readonly loadedFromServer = signal(false);
+  private readonly appliedVinylId = signal<number | null>(null);
 
   constructor() {
-    // Populate the form once the existing record loads (edit mode only, once).
+    // Populate the form when a record loads, and again whenever the loaded
+    // record is a different vinyl than the one currently applied (e.g. the
+    // route navigates to a newly-imported vinyl while this component
+    // instance is reused). Reloads of the same vinyl (save, image changes)
+    // leave in-progress field edits alone.
     effect(() => {
       const vinyl = this.detailResource.value();
-      if (!vinyl || this.loadedFromServer()) return;
+      if (!vinyl || vinyl.id === this.appliedVinylId()) return;
       this.applyVinyl(vinyl);
-      this.loadedFromServer.set(true);
+      this.appliedVinylId.set(vinyl.id);
     });
   }
 
