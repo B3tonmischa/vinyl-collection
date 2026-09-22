@@ -4,17 +4,32 @@
     (pointerdown)="onPointerDown($event)"
     (pointerup)="onPointerUp($event)"
   >
-    @for (item of windowCards(); track item.index) {
-      <button
-        type="button"
-        class="shrink-0 cursor-pointer transition-all duration-300 ease-out"
-        [class]="cardSizeClass(item.offset)"
-        (click)="onCardClick(item)"
-      >
-        <app-vinyl-card [vinyl]="item.vinyl" />
-      </button>
-    } @empty {
-      <p class="text-sm text-neutral-400">Your collection is empty — add your first record from the admin panel.</p>
+    @if (spinning()) {
+      <div class="relative h-full w-full">
+        @for (card of spinCards(); track card.virtualIndex) {
+          <div
+            class="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
+            [style.left]="'calc(50% + ' + card.offsetPx + 'px)'"
+            [style.width.px]="card.style.widthPx"
+            [style.opacity]="card.style.opacity"
+          >
+            <app-vinyl-card [vinyl]="card.vinyl" [showCaption]="false" />
+          </div>
+        }
+      </div>
+    } @else {
+      @for (item of windowCards(); track item.index) {
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer transition-all duration-300 ease-out"
+          [class]="cardSizeClass(item.offset)"
+          (click)="onCardClick(item)"
+        >
+          <app-vinyl-card [vinyl]="item.vinyl" [captionOverlay]="true" />
+        </button>
+      } @empty {
+        <p class="text-sm text-neutral-400">Your collection is empty — add your first record from the admin panel.</p>
+      }
     }
   </div>
 

@@ -1,21 +1,31 @@
-<div class="aspect-square overflow-hidden rounded-lg bg-neutral-100 shadow-sm">
-  @if (coverUrl) {
-    <img [src]="coverUrl" [alt]="vinyl.title" class="h-full w-full object-cover" loading="lazy" />
-  } @else {
-    <div class="flex h-full w-full items-center justify-center text-neutral-300">
-      <svg viewBox="0 0 24 24" class="h-10 w-10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" />
-        <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-      </svg>
+<div class="relative">
+  <div class="aspect-square overflow-hidden rounded-lg bg-neutral-100 shadow-sm">
+    @if (coverUrl) {
+      <img [src]="coverUrl" [alt]="vinyl.title" class="h-full w-full object-cover" loading="lazy" />
+    } @else {
+      <div class="flex h-full w-full items-center justify-center text-neutral-300">
+        <svg viewBox="0 0 24 24" class="h-10 w-10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+        </svg>
+      </div>
+    }
+  </div>
+  @if (showCaption) {
+    <div
+      class="mt-2 min-w-0"
+      [class.absolute]="captionOverlay"
+      [class.inset-x-0]="captionOverlay"
+      [class.top-full]="captionOverlay"
+      [class.animate-caption-drop-in]="captionOverlay"
+    >
+      <p class="truncate text-sm font-medium text-neutral-900">{{ vinyl.title }}</p>
+      <p class="truncate text-xs text-neutral-500">
+        {{ artistNames || 'Unknown artist' }}
+        @if (vinyl.year) {
+          <span> · {{ vinyl.year }}</span>
+        }
+      </p>
     </div>
   }
-</div>
-<div class="mt-2 min-w-0">
-  <p class="truncate text-sm font-medium text-neutral-900">{{ vinyl.title }}</p>
-  <p class="truncate text-xs text-neutral-500">
-    {{ artistNames || 'Unknown artist' }}
-    @if (vinyl.year) {
-      <span> · {{ vinyl.year }}</span>
-    }
-  </p>
 </div>

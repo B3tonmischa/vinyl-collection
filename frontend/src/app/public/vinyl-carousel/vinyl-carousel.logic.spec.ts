@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { computeWindow, randomIndex, wrapIndex } from './vinyl-carousel.logic';
+import {
+  computeWindow,
+  easeOutSeptic,
+  randomIndex,
+  rollInDurationMs,
+  spinOffsetPx,
+  spinPositionAt,
+  spinSizeAnchors,
+  spinSlotStyle,
+  spinSlots,
+  wrapIndex,
+} from './vinyl-carousel.logic';
 
 describe('wrapIndex', () => {
   it('returns the index unchanged when already in range', () => {
@@ -36,6 +47,178 @@ describe('randomIndex', () => {
       expect(index).toBeGreaterThanOrEqual(0);
       expect(index).toBeLessThan(7);
     }
+  });
+});
+
+describe('rollInDurationMs', () => {
+  it('returns a multi-second duration by default', () => {
+    const ms = rollInDurationMs(false);
+    expect(ms).toBeGreaterThanOrEqual(2000);
+    expect(ms).toBeLessThanOrEqual(3000);
+  });
+
+  it('returns zero (skip the animation) when reduced motion is preferred', () => {
+    expect(rollInDurationMs(true)).toBe(0);
+  });
+});
+
+describe('easeOutSeptic', () => {
+  it('starts at 0 and ends at 1', () => {
+    expect(easeOutSeptic(0)).toBe(0);
+    expect(easeOutSeptic(1)).toBe(1);
+  });
+
+  it('clamps outside [0, 1]', () => {
+    expect(easeOutSeptic(-1)).toBe(0);
+    expect(easeOutSeptic(2)).toBe(1);
+  });
+
+  it('is monotonically increasing', () => {
+    let prev = -Infinity;
+    for (let t = 0; t <= 1; t += 0.1) {
+      const value = easeOutSeptic(t);
+      expect(value).toBeGreaterThanOrEqual(prev);
+      prev = value;
+    }
+  });
+
+  it('decelerates: covers most of the distance early, coasting in at the end', () => {
+    // A hard "coast to a stop" tail: by the halfway mark in time, it's
+    // already most of the way there, then the last stretch is much slower.
+    expect(easeOutSeptic(0.5)).toBeGreaterThan(0.9);
+    const remainingAfterHalf = 1 - easeOutSeptic(0.5);
+    const remainingAfterNinety = 1 - easeOutSeptic(0.9);
+    expect(remainingAfterNinety).toBeLessThan(remainingAfterHalf);
+  });
+
+  it('crawls in more slowly than a quintic curve right before landing', () => {
+    // Higher-power curves cover more distance earlier, but their velocity
+    // right at the end — which is what actually reads as "slow tail" —
+    // is smaller than a lower-power curve's.
+    const quintic = (t: number) => 1 - (1 - t) ** 5;
+    const dt = 0.001;
+    const velocity = (fn: (t: number) => number) => (fn(1 - dt) - fn(1 - 2 * dt)) / dt;
+    expect(velocity(easeOutSeptic)).toBeLessThan(velocity(quintic));
+  });
+});
+
+describe('spinPositionAt', () => {
+  it('starts at realStart and lands exactly on realStart + distance', () => {
+    expect(spinPositionAt(-14, 20, 0)).toBe(-14);
+    expect(spinPositionAt(-14, 20, 1)).toBe(6);
+  });
+
+  it('is monotonically increasing over t for a positive distance', () => {
+    let prev = -Infinity;
+    for (let t = 0; t <= 1; t += 0.1) {
+      const value = spinPositionAt(0, 20, t);
+      expect(value).toBeGreaterThanOrEqual(prev);
+      prev = value;
+    }
+  });
+});
+
+describe('spinSizeAnchors', () => {
+  it('matches the steady-state mobile widths (w-56/w-36/w-20) below the sm breakpoint', () => {
+    expect(spinSizeAnchors(false)).toEqual([
+      [0, 224, 1],
+      [1, 144, 0.8],
+      [2, 80, 0.4],
+      [3, 0, 0],
+    ]);
+  });
+
+  it('matches the steady-state sm+ widths (w-64/w-44/w-24) at/above the sm breakpoint', () => {
+    expect(spinSizeAnchors(true)).toEqual([
+      [0, 256, 1],
+      [1, 176, 0.8],
+      [2, 96, 0.4],
+      [3, 0, 0],
+    ]);
+  });
+});
+
+describe('spinSlotStyle', () => {
+  const anchors = spinSizeAnchors(false);
+
+  it('is largest and fully opaque at distance 0', () => {
+    expect(spinSlotStyle(0, anchors)).toEqual({ widthPx: 224, opacity: 1 });
+  });
+
+  it('shrinks to nothing by distance 3, symmetrically in both directions', () => {
+    expect(spinSlotStyle(3, anchors)).toEqual({ widthPx: 0, opacity: 0 });
+    expect(spinSlotStyle(-3, anchors)).toEqual({ widthPx: 0, opacity: 0 });
+  });
+
+  it('interpolates smoothly between anchors rather than snapping', () => {
+    const atHalf = spinSlotStyle(0.5, anchors);
+    expect(atHalf.widthPx).toBeGreaterThan(spinSlotStyle(1, anchors).widthPx);
+    expect(atHalf.widthPx).toBeLessThan(spinSlotStyle(0, anchors).widthPx);
+  });
+
+  it('shrinks monotonically as distance grows', () => {
+    let prevWidth = Infinity;
+    for (let d = 0; d <= 3; d += 0.25) {
+      const { widthPx } = spinSlotStyle(d, anchors);
+      expect(widthPx).toBeLessThanOrEqual(prevWidth);
+      prevWidth = widthPx;
+    }
+  });
+});
+
+describe('spinOffsetPx', () => {
+  const anchors = spinSizeAnchors(true); // [0,256,1], [1,176,0.8], [2,96,0.4], [3,0,0]
+  const gap = 12;
+
+  it('is exactly 0 at distance 0 — the true center, always', () => {
+    expect(spinOffsetPx(0, anchors, gap)).toBe(0);
+  });
+
+  it('matches the steady-state flex row position exactly at each integer distance', () => {
+    // Same numbers a flex row of these widths + gap-3, centered, produces:
+    // half(256) + gap + half(176) = 128+12+88 = 228; then +88+12+48 = 148 more.
+    expect(spinOffsetPx(1, anchors, gap)).toBe(228);
+    expect(spinOffsetPx(2, anchors, gap)).toBe(376);
+  });
+
+  it('is symmetric for negative distances', () => {
+    expect(spinOffsetPx(-1, anchors, gap)).toBe(-228);
+    expect(spinOffsetPx(-2, anchors, gap)).toBe(-376);
+  });
+
+  it('is continuous and monotonically increasing with distance', () => {
+    let prev = -Infinity;
+    for (let d = 0; d <= 3; d += 0.1) {
+      const offset = spinOffsetPx(d, anchors, gap);
+      expect(offset).toBeGreaterThanOrEqual(prev);
+      prev = offset;
+    }
+  });
+});
+
+describe('spinSlots', () => {
+  it('returns 2*radius + 1 slots centered on the fractional position', () => {
+    const slots = spinSlots(4.3, 10, 3);
+    expect(slots).toHaveLength(7);
+    expect(slots.map((s) => s.virtualIndex)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('derives distance from the fractional part of position', () => {
+    const slots = spinSlots(4.3, 10, 1);
+    // base = 4, frac = 0.3 -> distances are k - frac for k in [-1, 0, 1]
+    expect(slots.map((s) => Number(s.distance.toFixed(2)))).toEqual([-1.3, -0.3, 0.7]);
+  });
+
+  it('wraps virtual indices into valid list indices', () => {
+    const slots = spinSlots(0.5, 3, 3);
+    for (const slot of slots) {
+      expect(slot.index).toBeGreaterThanOrEqual(0);
+      expect(slot.index).toBeLessThan(3);
+    }
+  });
+
+  it('returns nothing for an empty collection', () => {
+    expect(spinSlots(0, 0, 3)).toEqual([]);
   });
 });
 
