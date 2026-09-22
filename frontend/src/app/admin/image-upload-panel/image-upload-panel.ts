@@ -124,7 +124,12 @@ export class ImageUploadPanel {
   }
 
   protected isSwapSelected(slot: ImageSlot): boolean {
-    return this.swapSelection().some((s) => this.slotKey(s) === this.slotKey(slot));
+    return this.swapSelectionNumber(slot) > 0;
+  }
+
+  /** 1 or 2 for the two selected slots (matching pick order), 0 if unselected. */
+  protected swapSelectionNumber(slot: ImageSlot): number {
+    return this.swapSelection().findIndex((s) => this.slotKey(s) === this.slotKey(slot)) + 1;
   }
 
   protected toggleSwapSelection(slot: ImageSlot): void {

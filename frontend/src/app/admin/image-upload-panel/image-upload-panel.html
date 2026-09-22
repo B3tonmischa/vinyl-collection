@@ -42,9 +42,10 @@
       @for (slot of packagingSlots; track slot.kind) {
         <div class="w-28">
           <div
-            class="relative aspect-square overflow-hidden rounded bg-neutral-100"
-            [class.ring-2]="isSwapSelected(slot)"
-            [class.ring-neutral-900]="isSwapSelected(slot)"
+            [class]="
+              'relative aspect-square overflow-hidden rounded bg-neutral-100' +
+              (isSwapSelected(slot) ? ' ring-4 ring-indigo-500 ring-offset-2' : '')
+            "
           >
             @if (imageFor(slot); as image) {
               <img
@@ -57,10 +58,20 @@
                   type="button"
                   (click)="toggleSwapSelection(slot)"
                   [attr.aria-pressed]="isSwapSelected(slot)"
-                  class="absolute inset-0 bg-black/0 hover:bg-black/20 focus:outline-none"
+                  [class]="
+                    'absolute inset-0 focus:outline-none' +
+                    (isSwapSelected(slot) ? ' bg-indigo-500 opacity-40' : ' bg-black/0 hover:bg-black/20')
+                  "
                 >
                   <span class="sr-only">Select {{ slot.label }} for swap</span>
                 </button>
+                @if (isSwapSelected(slot)) {
+                  <span
+                    class="pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow"
+                  >
+                    {{ swapSelectionNumber(slot) }}
+                  </span>
+                }
               }
             }
           </div>
@@ -100,9 +111,10 @@
       @for (slot of discSlots; track slotKey(slot)) {
         <div class="w-28">
           <div
-            class="relative aspect-square overflow-hidden rounded bg-neutral-100"
-            [class.ring-2]="isSwapSelected(slot)"
-            [class.ring-neutral-900]="isSwapSelected(slot)"
+            [class]="
+              'relative aspect-square overflow-hidden rounded bg-neutral-100' +
+              (isSwapSelected(slot) ? ' ring-4 ring-indigo-500 ring-offset-2' : '')
+            "
           >
             @if (imageFor(slot); as image) {
               <img
@@ -115,10 +127,20 @@
                   type="button"
                   (click)="toggleSwapSelection(slot)"
                   [attr.aria-pressed]="isSwapSelected(slot)"
-                  class="absolute inset-0 bg-black/0 hover:bg-black/20 focus:outline-none"
+                  [class]="
+                    'absolute inset-0 focus:outline-none' +
+                    (isSwapSelected(slot) ? ' bg-indigo-500 opacity-40' : ' bg-black/0 hover:bg-black/20')
+                  "
                 >
                   <span class="sr-only">Select {{ slot.label }} for swap</span>
                 </button>
+                @if (isSwapSelected(slot)) {
+                  <span
+                    class="pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow"
+                  >
+                    {{ swapSelectionNumber(slot) }}
+                  </span>
+                }
               }
             }
           </div>
