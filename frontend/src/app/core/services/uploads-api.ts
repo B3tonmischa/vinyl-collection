@@ -42,4 +42,21 @@ export class UploadsApiService {
       ),
     );
   }
+
+  swap(
+    vinylId: number,
+    a: { kind: ImageKind; discNumber: number },
+    b: { kind: ImageKind; discNumber: number },
+  ): Promise<{ a: VinylImage; b: VinylImage }> {
+    return firstValueFrom(
+      this.http.post<{ a: VinylImage; b: VinylImage }>(
+        `${this.apiConfig.apiUrl}/vinyls/${vinylId}/images/swap`,
+        {
+          a: { kind: IMAGE_KIND_SLUGS[a.kind], discNumber: a.discNumber },
+          b: { kind: IMAGE_KIND_SLUGS[b.kind], discNumber: b.discNumber },
+        },
+        { withCredentials: true },
+      ),
+    );
+  }
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Param,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { SwapImagesDto } from './dto/swap-images.dto';
 import {
   IMAGE_KIND_SLUGS,
   ImageKindSlug,
@@ -23,6 +25,22 @@ import {
 @Controller('vinyls/:vinylId/images')
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
+
+  // Registered ahead of the `:kind` route below — Nest matches routes in
+  // declaration order, and `:kind` would otherwise swallow "swap" as a
+  // (invalid) kind value.
+  @Post('swap')
+  async swap(
+    @Param('vinylId', ParseIntPipe) vinylId: number,
+    @Body() body: SwapImagesDto,
+  ) {
+    const [a, b] = await this.uploadsService.swapImages(
+      vinylId,
+      { kindSlug: body.a.kind, discNumber: body.a.discNumber ?? 1 },
+      { kindSlug: body.b.kind, discNumber: body.b.discNumber ?? 1 },
+    );
+    return { a, b };
+  }
 
   @Post(':kind')
   @UseInterceptors(

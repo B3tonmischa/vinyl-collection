@@ -209,6 +209,60 @@ export class UploadsService {
     });
   }
 
+  // Swaps the images between two filled slots. Only the file references
+  // (fullPath/thumbPath) move between the two rows — the rows themselves
+  // stay pinned to their own kind/discNumber, so this can never collide
+  // with the @@unique([vinylId, kind, discNumber]) constraint and never
+  // touches a file on disk, which is also what makes it safe against data
+  // loss: it's two DB writes in one transaction, nothing to partially fail.
+  async swapImages(
+    vinylId: number,
+    a: { kindSlug: ImageKindSlug; discNumber: number },
+    b: { kindSlug: ImageKindSlug; discNumber: number },
+  ) {
+    const kindA = SLUG_TO_KIND[a.kindSlug];
+    const discNumberA = normalizeDiscNumber(kindA, a.discNumber);
+    const kindB = SLUG_TO_KIND[b.kindSlug];
+    const discNumberB = normalizeDiscNumber(kindB, b.discNumber);
+
+    if (kindA === kindB && discNumberA === discNumberB) {
+      throw new BadRequestException('Cannot swap a slot with itself');
+    }
+
+    const [imageA, imageB] = await Promise.all([
+      this.prisma.vinylImage.findUnique({
+        where: { vinylId_kind_discNumber: { vinylId, kind: kindA, discNumber: discNumberA } },
+      }),
+      this.prisma.vinylImage.findUnique({
+        where: { vinylId_kind_discNumber: { vinylId, kind: kindB, discNumber: discNumberB } },
+      }),
+    ]);
+
+    if (!imageA || imageA.deletedAt) {
+      throw new NotFoundException(
+        `No ${a.kindSlug} image (disc ${discNumberA}) stored for vinyl ${vinylId}`,
+      );
+    }
+    if (!imageB || imageB.deletedAt) {
+      throw new NotFoundException(
+        `No ${b.kindSlug} image (disc ${discNumberB}) stored for vinyl ${vinylId}`,
+      );
+    }
+
+    const [updatedA, updatedB] = await this.prisma.$transaction([
+      this.prisma.vinylImage.update({
+        where: { id: imageA.id },
+        data: { fullPath: imageB.fullPath, thumbPath: imageB.thumbPath },
+      }),
+      this.prisma.vinylImage.update({
+        where: { id: imageB.id },
+        data: { fullPath: imageA.fullPath, thumbPath: imageA.thumbPath },
+      }),
+    ]);
+
+    return [updatedA, updatedB] as const;
+  }
+
   // Undo — clears deletedAt on a currently soft-deleted slot. Meant to back
   // an immediate "Undo" affordance right after a delete, not a trash view.
   async restoreImage(
