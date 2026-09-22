@@ -206,6 +206,59 @@ describe('Discogs import', () => {
       expect(res.body.tracks[0].effectiveArtists).toEqual(res.body.artists);
     });
 
+    it('folds a track-scoped "Featuring" extraartists credit into the album artist(s) as the track override (KAN-13)', async () => {
+      // Mirrors Discogs release 895621 (Santana - Supernatural): every
+      // track's own artists[] is empty, and the guest artist only appears
+      // in extraartists with role "Featuring"/"Vocals".
+      discogs.getRelease.mockResolvedValue(
+        releaseFixture({
+          artists: [{ id: 1, name: 'Santana' }],
+          tracklist: [
+            { position: 'A1', type_: 'track', title: 'Da Le Yaleo' },
+            {
+              position: 'A2',
+              type_: 'track',
+              title: 'Love Of My Life',
+              extraartists: [{ id: 20, name: 'Dave Matthews', role: 'Featuring' }],
+            },
+            {
+              position: 'B1',
+              type_: 'track',
+              title: 'Smooth',
+              extraartists: [{ id: 21, name: 'Rob Thomas', role: 'Vocals' }],
+            },
+          ],
+        }),
+      );
+
+      const res = await admin.get('/import/discogs/249504').expect(200);
+
+      expect(res.body.artists).toEqual([{ id: expect.any(Number), name: 'Santana' }]);
+
+      // No featuring credit: inherits, same as before.
+      expect(res.body.tracks[0].artists).toEqual([]);
+      expect(res.body.tracks[0].effectiveArtists).toEqual(res.body.artists);
+
+      // Featuring credit with no own artists[]: override includes BOTH the
+      // album artist and the guest, not just the guest.
+      const santanaId = res.body.artists[0].id;
+      expect(res.body.tracks[1].artists).toEqual(
+        expect.arrayContaining([
+          { id: santanaId, name: 'Santana' },
+          { id: expect.any(Number), name: 'Dave Matthews' },
+        ]),
+      );
+      expect(res.body.tracks[1].artists).toHaveLength(2);
+
+      expect(res.body.tracks[2].artists).toEqual(
+        expect.arrayContaining([
+          { id: santanaId, name: 'Santana' },
+          { id: expect.any(Number), name: 'Rob Thomas' },
+        ]),
+      );
+      expect(res.body.tracks[2].artists).toHaveLength(2);
+    });
+
     it('leaves releaseType/discSize/speed null when the format descriptions do not confidently match anything', async () => {
       discogs.getRelease.mockResolvedValue(
         releaseFixture({ formats: [{ name: 'Vinyl', descriptions: ['Limited Edition', 'Gatefold'] }] }),
