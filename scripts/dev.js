@@ -22,12 +22,14 @@ const PROCESSES = [
     color: '\x1b[34m', // blue
     cwd: path.join(ROOT, 'backend'),
     args: ['run', 'start:dev'],
+    port: 3000,
   },
   {
     name: 'frontend',
     color: '\x1b[35m', // magenta
     cwd: path.join(ROOT, 'frontend'),
     args: ['start'],
+    port: 4200,
   },
 ];
 
@@ -65,7 +67,15 @@ console.log('Starting backend (http://localhost:3000) and frontend (http://local
 console.log('Press Ctrl+C to stop both.\n');
 
 for (const proc of PROCESSES) {
-  const child = spawn(npmCmd, proc.args, { cwd: proc.cwd, shell: true });
+  // Both the backend and Angular's dev server fall back to $PORT when set,
+  // so an ambient PORT (from a shell, IDE, or hosting-style env) would
+  // otherwise point them at the same port and one loses the bind. Pin each
+  // child to its own fixed port regardless of what's inherited.
+  const child = spawn(npmCmd, proc.args, {
+    cwd: proc.cwd,
+    shell: true,
+    env: { ...process.env, PORT: String(proc.port) },
+  });
   children.push(child);
 
   child.stdout.on('data', (chunk) => prefixedWrite(process.stdout, proc, chunk));
