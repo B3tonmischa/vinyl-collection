@@ -18,6 +18,15 @@ export function randomIndex(length: number, rng: () => number = Math.random): nu
 }
 
 /**
+ * Duration (ms) of the carousel's roll-in animation on landing. Tweak the
+ * constant to adjust the feel. Reduced-motion preference skips the
+ * animation entirely (0 = no animation).
+ */
+export function rollInDurationMs(reducedMotion: boolean): number {
+  return reducedMotion ? 0 : 2400;
+}
+
+/**
  * Computes the 5-card display window (center ± 2) around `center`,
  * wrapping around the ends. When the collection is smaller than the
  * window, later (more-distant) offsets that would land on an

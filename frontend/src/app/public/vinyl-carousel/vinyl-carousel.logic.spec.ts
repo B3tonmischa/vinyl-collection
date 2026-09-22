@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeWindow, randomIndex, wrapIndex } from './vinyl-carousel.logic';
+import { computeWindow, randomIndex, rollInDurationMs, wrapIndex } from './vinyl-carousel.logic';
 
 describe('wrapIndex', () => {
   it('returns the index unchanged when already in range', () => {
@@ -36,6 +36,18 @@ describe('randomIndex', () => {
       expect(index).toBeGreaterThanOrEqual(0);
       expect(index).toBeLessThan(7);
     }
+  });
+});
+
+describe('rollInDurationMs', () => {
+  it('returns a multi-second duration by default', () => {
+    const ms = rollInDurationMs(false);
+    expect(ms).toBeGreaterThanOrEqual(2000);
+    expect(ms).toBeLessThanOrEqual(3000);
+  });
+
+  it('returns zero (skip the animation) when reduced motion is preferred', () => {
+    expect(rollInDurationMs(true)).toBe(0);
   });
 });
 

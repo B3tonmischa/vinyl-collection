@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Vinyl } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
-import { computeWindow, randomIndex } from './vinyl-carousel.logic';
+import { computeWindow, randomIndex, rollInDurationMs } from './vinyl-carousel.logic';
 
 /**
  * Default (no-search) browse view: a horizontal carousel closer to
@@ -23,18 +23,47 @@ import { computeWindow, randomIndex } from './vinyl-carousel.logic';
     '(keydown.ArrowLeft)': 'prev()',
     '(keydown.ArrowRight)': 'next()',
   },
+  styles: [
+    `
+      @keyframes carousel-roll-in {
+        from {
+          transform: translateX(-45%);
+          opacity: 0;
+        }
+        60% {
+          opacity: 1;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      .animate-carousel-roll-in {
+        animation: carousel-roll-in var(--carousel-roll-in-duration, 2400ms) cubic-bezier(0, 0, 0.2, 1) both;
+      }
+    `,
+  ],
 })
 export class VinylCarouselComponent {
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly _vinyls = signal<Vinyl[]>([]);
   private readonly _center = signal<number | null>(null);
+
+  private readonly reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  protected readonly rollInDuration = rollInDurationMs(this.reducedMotion);
+  protected readonly rollingIn = signal(false);
 
   @Input({ required: true })
   set vinyls(value: Vinyl[]) {
     this._vinyls.set(value);
     if (value.length > 0 && this._center() === null) {
       this._center.set(randomIndex(value.length));
+      this.startRollIn();
     }
   }
 
@@ -82,6 +111,13 @@ export class VinylCarouselComponent {
     if (vinyl) {
       void this.router.navigate(['/vinyl', vinyl.id]);
     }
+  }
+
+  private startRollIn(): void {
+    if (this.reducedMotion) return;
+    this.rollingIn.set(true);
+    const timeout = setTimeout(() => this.rollingIn.set(false), this.rollInDuration);
+    this.destroyRef.onDestroy(() => clearTimeout(timeout));
   }
 
   private dragStartX: number | null = null;
