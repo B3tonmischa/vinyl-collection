@@ -18,7 +18,7 @@
           [class]="cardSizeClass(item.offset)"
           (click)="onCardClick(item)"
         >
-          <app-vinyl-card [vinyl]="item.vinyl" />
+          <app-vinyl-card [vinyl]="item.vinyl" [captionOverlay]="true" />
         </button>
       } @empty {
         <p class="text-sm text-neutral-400">Your collection is empty — add your first record from the admin panel.</p>
