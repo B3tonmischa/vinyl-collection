@@ -100,7 +100,7 @@ describe('Image upload pipeline', () => {
     });
 
     const res = await admin
-      .post(`/vinyls/${vinylId}/images/inner-sleeve`)
+      .post(`/vinyls/${vinylId}/images/inner-sleeve-a`)
       .attach('file', buf, 'sleeve.jpg')
       .expect(201);
 
@@ -158,7 +158,7 @@ describe('Image upload pipeline', () => {
     expect(coverBackImages).toHaveLength(1);
   });
 
-  it('packaging kinds (cover-front/back, inner-sleeve) always use discNumber 1, ignoring the query param', async () => {
+  it('packaging kinds (cover-front/back, inner-sleeve-a/b) always use discNumber 1, ignoring the query param', async () => {
     const buf = await createTestImageBuffer({ width: 100, height: 100 });
     const res = await admin
       .post(`/vinyls/${vinylId}/images/cover-front`)
