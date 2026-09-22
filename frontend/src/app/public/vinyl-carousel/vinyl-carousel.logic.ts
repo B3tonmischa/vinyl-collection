@@ -53,22 +53,40 @@ export interface CarouselSlotStyle {
   opacity: number;
 }
 
+/** [distance, widthPx, opacity] anchor. */
+export type SpinSizeAnchor = [number, number, number];
+
+/**
+ * Size anchors for the roll-in spin, matching the steady-state view's own
+ * `cardSizeClass` Tailwind widths exactly (w-56/w-36/w-20 below the `sm`
+ * breakpoint at 640px, w-64/w-44/w-24 at/above it) — so the spin lands on
+ * a card that's already the right size instead of popping into it.
+ */
+export function spinSizeAnchors(wideViewport: boolean): SpinSizeAnchor[] {
+  return wideViewport
+    ? [
+        [0, 256, 1],
+        [1, 176, 0.8],
+        [2, 96, 0.4],
+        [3, 0, 0],
+      ]
+    : [
+        [0, 224, 1],
+        [1, 144, 0.8],
+        [2, 80, 0.4],
+        [3, 0, 0],
+      ];
+}
+
 /**
  * Continuous card width/opacity as a function of `distance` — how many
  * slots a card currently sits from the (continuously moving) center.
- * Interpolates smoothly through the same size tiers the steady-state
- * view uses, instead of snapping between discrete buckets, so a card's
- * size glides as the spin passes it rather than jumping.
+ * Interpolates smoothly through `anchors` instead of snapping between
+ * discrete buckets, so a card's size glides as the spin passes it rather
+ * than jumping.
  */
-export function spinSlotStyle(distance: number): CarouselSlotStyle {
+export function spinSlotStyle(distance: number, anchors: SpinSizeAnchor[]): CarouselSlotStyle {
   const d = Math.abs(distance);
-  // [distance, widthPx, opacity] anchors, matching the steady-state tiers.
-  const anchors: [number, number, number][] = [
-    [0, 224, 1],
-    [1, 144, 0.8],
-    [2, 80, 0.4],
-    [3, 0, 0],
-  ];
   for (let i = 0; i < anchors.length - 1; i++) {
     const [d0, w0, o0] = anchors[i];
     const [d1, w1, o1] = anchors[i + 1];

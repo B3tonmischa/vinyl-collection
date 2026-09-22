@@ -2,7 +2,15 @@ import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject
 import { Router } from '@angular/router';
 import { Vinyl } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
-import { computeWindow, randomIndex, rollInDurationMs, spinPositionAt, spinSlotStyle, spinSlots } from './vinyl-carousel.logic';
+import {
+  computeWindow,
+  randomIndex,
+  rollInDurationMs,
+  spinPositionAt,
+  spinSizeAnchors,
+  spinSlotStyle,
+  spinSlots,
+} from './vinyl-carousel.logic';
 
 /** How many virtual slots (not wraps) the roll-in spin travels before landing. */
 const SPIN_DISTANCE = 20;
@@ -41,6 +49,12 @@ export class VinylCarouselComponent {
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Matches the `sm:` breakpoint cardSizeClass() switches on, so the spin's
+  // card sizes land already at the size the steady-state view will show.
+  private readonly spinAnchors = spinSizeAnchors(
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 640px)').matches,
+  );
+
   /** True while the roll-in spin is running; manual navigation is ignored until it lands. */
   protected readonly spinning = signal(false);
   /** Continuous fractional center position, only meaningful while spinning. */
@@ -66,7 +80,7 @@ export class VinylCarouselComponent {
     const position = this.spinPosition();
     if (position === null || list.length === 0) return [];
     return spinSlots(position, list.length, SPIN_SLOT_RADIUS)
-      .map((slot) => ({ ...slot, vinyl: list[slot.index], style: spinSlotStyle(slot.distance) }))
+      .map((slot) => ({ ...slot, vinyl: list[slot.index], style: spinSlotStyle(slot.distance, this.spinAnchors) }))
       .filter((slot) => slot.style.opacity > 0.001);
   });
 

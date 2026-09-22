@@ -5,6 +5,7 @@ import {
   randomIndex,
   rollInDurationMs,
   spinPositionAt,
+  spinSizeAnchors,
   spinSlotStyle,
   spinSlots,
   wrapIndex,
@@ -106,26 +107,48 @@ describe('spinPositionAt', () => {
   });
 });
 
+describe('spinSizeAnchors', () => {
+  it('matches the steady-state mobile widths (w-56/w-36/w-20) below the sm breakpoint', () => {
+    expect(spinSizeAnchors(false)).toEqual([
+      [0, 224, 1],
+      [1, 144, 0.8],
+      [2, 80, 0.4],
+      [3, 0, 0],
+    ]);
+  });
+
+  it('matches the steady-state sm+ widths (w-64/w-44/w-24) at/above the sm breakpoint', () => {
+    expect(spinSizeAnchors(true)).toEqual([
+      [0, 256, 1],
+      [1, 176, 0.8],
+      [2, 96, 0.4],
+      [3, 0, 0],
+    ]);
+  });
+});
+
 describe('spinSlotStyle', () => {
+  const anchors = spinSizeAnchors(false);
+
   it('is largest and fully opaque at distance 0', () => {
-    expect(spinSlotStyle(0)).toEqual({ widthPx: 224, opacity: 1 });
+    expect(spinSlotStyle(0, anchors)).toEqual({ widthPx: 224, opacity: 1 });
   });
 
   it('shrinks to nothing by distance 3, symmetrically in both directions', () => {
-    expect(spinSlotStyle(3)).toEqual({ widthPx: 0, opacity: 0 });
-    expect(spinSlotStyle(-3)).toEqual({ widthPx: 0, opacity: 0 });
+    expect(spinSlotStyle(3, anchors)).toEqual({ widthPx: 0, opacity: 0 });
+    expect(spinSlotStyle(-3, anchors)).toEqual({ widthPx: 0, opacity: 0 });
   });
 
   it('interpolates smoothly between anchors rather than snapping', () => {
-    const atHalf = spinSlotStyle(0.5);
-    expect(atHalf.widthPx).toBeGreaterThan(spinSlotStyle(1).widthPx);
-    expect(atHalf.widthPx).toBeLessThan(spinSlotStyle(0).widthPx);
+    const atHalf = spinSlotStyle(0.5, anchors);
+    expect(atHalf.widthPx).toBeGreaterThan(spinSlotStyle(1, anchors).widthPx);
+    expect(atHalf.widthPx).toBeLessThan(spinSlotStyle(0, anchors).widthPx);
   });
 
   it('shrinks monotonically as distance grows', () => {
     let prevWidth = Infinity;
     for (let d = 0; d <= 3; d += 0.25) {
-      const { widthPx } = spinSlotStyle(d);
+      const { widthPx } = spinSlotStyle(d, anchors);
       expect(widthPx).toBeLessThanOrEqual(prevWidth);
       prevWidth = widthPx;
     }
