@@ -68,7 +68,7 @@ Admin only (needs the `session` cookie set by `/auth/login`):
 - `PATCH /vinyls/:id` — update
 - `DELETE /vinyls/:id` — delete (cascades its images, both DB rows and files)
 - `POST /vinyls/:id/images/:kind` — multipart upload, field name `file`.
-  `:kind` is one of `cover-front`, `cover-back`, `inner-sleeve`, `vinyl`.
+  `:kind` is one of `cover-front`, `cover-back`, `inner-sleeve-a`, `inner-sleeve-b`, `vinyl`.
   Uploading again for the same kind replaces the previous image.
 - `DELETE /vinyls/:id/images/:kind` — remove one image
 

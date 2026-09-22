@@ -30,7 +30,12 @@ enum Speed {
 enum ImageKind {
   COVER_FRONT
   COVER_BACK
-  INNER_SLEEVE
+  // Gatefold releases have two independent inner sleeves; A/B are just slots,
+  // not a claim about which physical sleeve is "first" (see migration
+  // 20260922_rename_inner_sleeve_to_a_b, which moves existing INNER_SLEEVE
+  // rows to slot A).
+  INNER_SLEEVE_A
+  INNER_SLEEVE_B
   DISC_SIDE_A
   DISC_SIDE_B
 }
@@ -110,9 +115,9 @@ model TrackArtist {
 model VinylImage {
   id         Int       @id @default(autoincrement())
   kind       ImageKind
-  // Default 1 for packaging-level kinds (COVER_FRONT/COVER_BACK/INNER_SLEEVE),
-  // which stay single regardless of disc count; varies for DISC_SIDE_A/B on
-  // multi-disc releases.
+  // Default 1 for packaging-level kinds (COVER_FRONT/COVER_BACK/
+  // INNER_SLEEVE_A/INNER_SLEEVE_B), which stay single regardless of disc
+  // count; varies for DISC_SIDE_A/B on multi-disc releases.
   discNumber Int       @default(1)
   // Paths are relative to the /uploads static root, e.g. "12/cover-front-full.webp"
   fullPath   String

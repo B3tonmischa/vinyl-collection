@@ -97,31 +97,83 @@ describe('Image new-feature behavior (disc/side uniqueness, soft delete + restor
   it('restoring a soft-deleted image slot brings it back, unchanged', async () => {
     const buf = await createTestImageBuffer({ width: 250, height: 250 });
     const uploadRes = await admin
-      .post(`/vinyls/${vinylId}/images/inner-sleeve`)
+      .post(`/vinyls/${vinylId}/images/inner-sleeve-a`)
       .attach('file', buf, 'sleeve.jpg')
       .expect(201);
 
-    await admin.delete(`/vinyls/${vinylId}/images/inner-sleeve`).expect(200);
+    await admin.delete(`/vinyls/${vinylId}/images/inner-sleeve-a`).expect(200);
     let vinyl = await request(ctx.httpServer).get(`/vinyls/${vinylId}`).expect(200);
     expect(
-      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE'),
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_A'),
     ).toBe(false);
 
     const restoreRes = await admin
-      .post(`/vinyls/${vinylId}/images/inner-sleeve/restore`)
+      .post(`/vinyls/${vinylId}/images/inner-sleeve-a/restore`)
       .expect(201);
     expect(restoreRes.body.id).toBe(uploadRes.body.id);
     expect(restoreRes.body.fullPath).toBe(uploadRes.body.fullPath);
 
     vinyl = await request(ctx.httpServer).get(`/vinyls/${vinylId}`).expect(200);
     expect(
-      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE'),
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_A'),
     ).toBe(true);
 
     // The original file is exactly what comes back — restore never re-derives it.
     const meta = await sharp(join(ctx.uploadsDir, restoreRes.body.fullPath)).metadata();
     expect(meta.width).toBe(250);
     expect(meta.height).toBe(250);
+  });
+
+  it('gatefold: both inner-sleeve slots can be uploaded, replaced, soft-deleted, and restored independently', async () => {
+    const sleeveA1 = await createTestImageBuffer({ width: 200, height: 200 });
+    const resA1 = await admin
+      .post(`/vinyls/${vinylId}/images/inner-sleeve-a`)
+      .attach('file', sleeveA1, 'sleeve-a-1.jpg')
+      .expect(201);
+
+    const sleeveB = await createTestImageBuffer({ width: 300, height: 300 });
+    const resB = await admin
+      .post(`/vinyls/${vinylId}/images/inner-sleeve-b`)
+      .attach('file', sleeveB, 'sleeve-b.jpg')
+      .expect(201);
+
+    // Distinct rows and files — slot A and slot B don't collide.
+    expect(resB.body.id).not.toBe(resA1.body.id);
+    expect(resA1.body.fullPath).toBe(`${vinylId}/inner-sleeve-a-1-full.webp`);
+    expect(resB.body.fullPath).toBe(`${vinylId}/inner-sleeve-b-1-full.webp`);
+
+    // Replacing slot A leaves slot B's row and file untouched.
+    const sleeveA2 = await createTestImageBuffer({ width: 210, height: 210 });
+    const resA2 = await admin
+      .post(`/vinyls/${vinylId}/images/inner-sleeve-a`)
+      .attach('file', sleeveA2, 'sleeve-a-2.jpg')
+      .expect(201);
+    expect(resA2.body.id).toBe(resA1.body.id);
+
+    let vinyl = await request(ctx.httpServer).get(`/vinyls/${vinylId}`).expect(200);
+    expect(
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_B'),
+    ).toBe(true);
+
+    // Soft-deleting slot A leaves slot B visible.
+    await admin.delete(`/vinyls/${vinylId}/images/inner-sleeve-a`).expect(200);
+    vinyl = await request(ctx.httpServer).get(`/vinyls/${vinylId}`).expect(200);
+    expect(
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_A'),
+    ).toBe(false);
+    expect(
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_B'),
+    ).toBe(true);
+
+    // Restoring slot A brings it back without touching slot B.
+    await admin.post(`/vinyls/${vinylId}/images/inner-sleeve-a/restore`).expect(201);
+    vinyl = await request(ctx.httpServer).get(`/vinyls/${vinylId}`).expect(200);
+    expect(
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_A'),
+    ).toBe(true);
+    expect(
+      vinyl.body.images.some((img: { kind: string }) => img.kind === 'INNER_SLEEVE_B'),
+    ).toBe(true);
   });
 
   it('404s restoring an image slot that was never deleted', async () => {

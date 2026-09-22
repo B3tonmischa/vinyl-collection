@@ -7,7 +7,8 @@ export type Speed = 'RPM_33' | 'RPM_45' | 'RPM_78';
 export type ImageKind =
   | 'COVER_FRONT'
   | 'COVER_BACK'
-  | 'INNER_SLEEVE'
+  | 'INNER_SLEEVE_A'
+  | 'INNER_SLEEVE_B'
   | 'DISC_SIDE_A'
   | 'DISC_SIDE_B';
 
@@ -84,12 +85,18 @@ export interface TrackPayload {
 export const IMAGE_KIND_SLUGS: Record<ImageKind, string> = {
   COVER_FRONT: 'cover-front',
   COVER_BACK: 'cover-back',
-  INNER_SLEEVE: 'inner-sleeve',
+  INNER_SLEEVE_A: 'inner-sleeve-a',
+  INNER_SLEEVE_B: 'inner-sleeve-b',
   DISC_SIDE_A: 'disc-side-a',
   DISC_SIDE_B: 'disc-side-b',
 };
 
-export const PACKAGING_IMAGE_KINDS: ImageKind[] = ['COVER_FRONT', 'COVER_BACK', 'INNER_SLEEVE'];
+export const PACKAGING_IMAGE_KINDS: ImageKind[] = [
+  'COVER_FRONT',
+  'COVER_BACK',
+  'INNER_SLEEVE_A',
+  'INNER_SLEEVE_B',
+];
 export const DISC_IMAGE_KINDS: ImageKind[] = ['DISC_SIDE_A', 'DISC_SIDE_B'];
 
 export const RELEASE_TYPE_LABELS: Record<ReleaseType, string> = {

@@ -63,7 +63,8 @@ async function withTransientFsRetry<T>(
 export const IMAGE_KIND_SLUGS = [
   'cover-front',
   'cover-back',
-  'inner-sleeve',
+  'inner-sleeve-a',
+  'inner-sleeve-b',
   'disc-side-a',
   'disc-side-b',
 ] as const;
@@ -72,7 +73,8 @@ export type ImageKindSlug = (typeof IMAGE_KIND_SLUGS)[number];
 const SLUG_TO_KIND: Record<ImageKindSlug, ImageKind> = {
   'cover-front': ImageKind.COVER_FRONT,
   'cover-back': ImageKind.COVER_BACK,
-  'inner-sleeve': ImageKind.INNER_SLEEVE,
+  'inner-sleeve-a': ImageKind.INNER_SLEEVE_A,
+  'inner-sleeve-b': ImageKind.INNER_SLEEVE_B,
   'disc-side-a': ImageKind.DISC_SIDE_A,
   'disc-side-b': ImageKind.DISC_SIDE_B,
 };
@@ -83,7 +85,8 @@ const SLUG_TO_KIND: Record<ImageKindSlug, ImageKind> = {
 const PACKAGING_KINDS = new Set<ImageKind>([
   ImageKind.COVER_FRONT,
   ImageKind.COVER_BACK,
-  ImageKind.INNER_SLEEVE,
+  ImageKind.INNER_SLEEVE_A,
+  ImageKind.INNER_SLEEVE_B,
 ]);
 
 // Resolved lazily (not at module-load time) so tests can point this at an

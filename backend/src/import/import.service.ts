@@ -39,14 +39,15 @@ function nameSet(names: string[]): Set<string> {
 // discogs-import-feature-plan.md open question #1 and its "expect this
 // mapping to be unreliable" caveat): Discogs's API only distinguishes
 // "primary" vs. "secondary" images and doesn't say which secondary image is
-// the back cover vs. the inner sleeve vs. a disc photo. This fills the
-// app's five slots in a fixed order (primary first, then secondaries as
-// they come) and leaves reassigning/removing to the admin afterward via the
-// existing ImageUploadPanel — the same UI a manual upload uses.
+// the back cover vs. an inner sleeve vs. a disc photo. This fills the app's
+// six slots in a fixed order (primary first, then secondaries as they come)
+// and leaves reassigning/removing to the admin afterward via the existing
+// ImageUploadPanel — the same UI a manual upload uses.
 const IMAGE_SLOT_ORDER: ImageKindSlug[] = [
   'cover-front',
   'cover-back',
-  'inner-sleeve',
+  'inner-sleeve-a',
+  'inner-sleeve-b',
   'disc-side-a',
   'disc-side-b',
 ];

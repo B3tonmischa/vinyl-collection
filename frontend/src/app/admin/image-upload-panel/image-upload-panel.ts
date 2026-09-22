@@ -13,7 +13,8 @@ interface ImageSlot {
 const PACKAGING_SLOTS: ImageSlot[] = [
   { kind: 'COVER_FRONT', discNumber: 1, label: 'Cover front' },
   { kind: 'COVER_BACK', discNumber: 1, label: 'Cover back' },
-  { kind: 'INNER_SLEEVE', discNumber: 1, label: 'Inner sleeve' },
+  { kind: 'INNER_SLEEVE_A', discNumber: 1, label: 'Inner sleeve A' },
+  { kind: 'INNER_SLEEVE_B', discNumber: 1, label: 'Inner sleeve B' },
 ];
 
 /** One upload/replace/delete slot per image kind + disc number. */
