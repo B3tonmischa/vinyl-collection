@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeWindow,
-  easeOutQuintic,
+  easeOutSeptic,
   randomIndex,
   rollInDurationMs,
+  spinOffsetPx,
   spinPositionAt,
   spinSizeAnchors,
   spinSlotStyle,
@@ -61,21 +62,21 @@ describe('rollInDurationMs', () => {
   });
 });
 
-describe('easeOutQuintic', () => {
+describe('easeOutSeptic', () => {
   it('starts at 0 and ends at 1', () => {
-    expect(easeOutQuintic(0)).toBe(0);
-    expect(easeOutQuintic(1)).toBe(1);
+    expect(easeOutSeptic(0)).toBe(0);
+    expect(easeOutSeptic(1)).toBe(1);
   });
 
   it('clamps outside [0, 1]', () => {
-    expect(easeOutQuintic(-1)).toBe(0);
-    expect(easeOutQuintic(2)).toBe(1);
+    expect(easeOutSeptic(-1)).toBe(0);
+    expect(easeOutSeptic(2)).toBe(1);
   });
 
   it('is monotonically increasing', () => {
     let prev = -Infinity;
     for (let t = 0; t <= 1; t += 0.1) {
-      const value = easeOutQuintic(t);
+      const value = easeOutSeptic(t);
       expect(value).toBeGreaterThanOrEqual(prev);
       prev = value;
     }
@@ -84,10 +85,20 @@ describe('easeOutQuintic', () => {
   it('decelerates: covers most of the distance early, coasting in at the end', () => {
     // A hard "coast to a stop" tail: by the halfway mark in time, it's
     // already most of the way there, then the last stretch is much slower.
-    expect(easeOutQuintic(0.5)).toBeGreaterThan(0.9);
-    const remainingAfterHalf = 1 - easeOutQuintic(0.5);
-    const remainingAfterNinety = 1 - easeOutQuintic(0.9);
+    expect(easeOutSeptic(0.5)).toBeGreaterThan(0.9);
+    const remainingAfterHalf = 1 - easeOutSeptic(0.5);
+    const remainingAfterNinety = 1 - easeOutSeptic(0.9);
     expect(remainingAfterNinety).toBeLessThan(remainingAfterHalf);
+  });
+
+  it('crawls in more slowly than a quintic curve right before landing', () => {
+    // Higher-power curves cover more distance earlier, but their velocity
+    // right at the end — which is what actually reads as "slow tail" —
+    // is smaller than a lower-power curve's.
+    const quintic = (t: number) => 1 - (1 - t) ** 5;
+    const dt = 0.001;
+    const velocity = (fn: (t: number) => number) => (fn(1 - dt) - fn(1 - 2 * dt)) / dt;
+    expect(velocity(easeOutSeptic)).toBeLessThan(velocity(quintic));
   });
 });
 
@@ -151,6 +162,36 @@ describe('spinSlotStyle', () => {
       const { widthPx } = spinSlotStyle(d, anchors);
       expect(widthPx).toBeLessThanOrEqual(prevWidth);
       prevWidth = widthPx;
+    }
+  });
+});
+
+describe('spinOffsetPx', () => {
+  const anchors = spinSizeAnchors(true); // [0,256,1], [1,176,0.8], [2,96,0.4], [3,0,0]
+  const gap = 12;
+
+  it('is exactly 0 at distance 0 — the true center, always', () => {
+    expect(spinOffsetPx(0, anchors, gap)).toBe(0);
+  });
+
+  it('matches the steady-state flex row position exactly at each integer distance', () => {
+    // Same numbers a flex row of these widths + gap-3, centered, produces:
+    // half(256) + gap + half(176) = 128+12+88 = 228; then +88+12+48 = 148 more.
+    expect(spinOffsetPx(1, anchors, gap)).toBe(228);
+    expect(spinOffsetPx(2, anchors, gap)).toBe(376);
+  });
+
+  it('is symmetric for negative distances', () => {
+    expect(spinOffsetPx(-1, anchors, gap)).toBe(-228);
+    expect(spinOffsetPx(-2, anchors, gap)).toBe(-376);
+  });
+
+  it('is continuous and monotonically increasing with distance', () => {
+    let prev = -Infinity;
+    for (let d = 0; d <= 3; d += 0.1) {
+      const offset = spinOffsetPx(d, anchors, gap);
+      expect(offset).toBeGreaterThanOrEqual(prev);
+      prev = offset;
     }
   });
 });

@@ -5,11 +5,18 @@
     (pointerup)="onPointerUp($event)"
   >
     @if (spinning()) {
-      @for (card of spinCards(); track card.virtualIndex) {
-        <div class="shrink-0 overflow-hidden" [style.width.px]="card.style.widthPx" [style.opacity]="card.style.opacity">
-          <app-vinyl-card [vinyl]="card.vinyl" [showCaption]="false" />
-        </div>
-      }
+      <div class="relative h-full w-full">
+        @for (card of spinCards(); track card.virtualIndex) {
+          <div
+            class="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
+            [style.left]="'calc(50% + ' + card.offsetPx + 'px)'"
+            [style.width.px]="card.style.widthPx"
+            [style.opacity]="card.style.opacity"
+          >
+            <app-vinyl-card [vinyl]="card.vinyl" [showCaption]="false" />
+          </div>
+        }
+      </div>
     } @else {
       @for (item of windowCards(); track item.index) {
         <button

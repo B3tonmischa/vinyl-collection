@@ -6,6 +6,7 @@ import {
   computeWindow,
   randomIndex,
   rollInDurationMs,
+  spinOffsetPx,
   spinPositionAt,
   spinSizeAnchors,
   spinSlotStyle,
@@ -16,6 +17,8 @@ import {
 const SPIN_DISTANCE = 20;
 /** How many slots either side of center the spin filmstrip renders. */
 const SPIN_SLOT_RADIUS = 3;
+/** Matches the steady-state row's own `gap-3`. */
+const SPIN_GAP_PX = 12;
 
 /**
  * Default (no-search) browse view: a horizontal carousel closer to
@@ -80,7 +83,12 @@ export class VinylCarouselComponent {
     const position = this.spinPosition();
     if (position === null || list.length === 0) return [];
     return spinSlots(position, list.length, SPIN_SLOT_RADIUS)
-      .map((slot) => ({ ...slot, vinyl: list[slot.index], style: spinSlotStyle(slot.distance, this.spinAnchors) }))
+      .map((slot) => ({
+        ...slot,
+        vinyl: list[slot.index],
+        style: spinSlotStyle(slot.distance, this.spinAnchors),
+        offsetPx: spinOffsetPx(slot.distance, this.spinAnchors, SPIN_GAP_PX),
+      }))
       .filter((slot) => slot.style.opacity > 0.001);
   });
 

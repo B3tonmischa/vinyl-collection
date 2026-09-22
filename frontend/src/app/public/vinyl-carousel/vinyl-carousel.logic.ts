@@ -23,17 +23,17 @@ export function randomIndex(length: number, rng: () => number = Math.random): nu
  * animation entirely (0 = no animation).
  */
 export function rollInDurationMs(reducedMotion: boolean): number {
-  return reducedMotion ? 0 : 2400;
+  return reducedMotion ? 0 : 2800;
 }
 
 /**
- * Quintic ease-out: near-linear (fast) at the start, then decelerates
- * hard into the landing — a pronounced "coasting to a stop" tail rather
- * than a constant-speed slide.
+ * Septic (7th power) ease-out: near-linear (fast) at the start, then
+ * decelerates hard into the landing — an even longer, slower "coasting
+ * to a stop" tail than a quintic curve gives.
  */
-export function easeOutQuintic(t: number): number {
+export function easeOutSeptic(t: number): number {
   const clamped = Math.min(1, Math.max(0, t));
-  return 1 - (1 - clamped) ** 5;
+  return 1 - (1 - clamped) ** 7;
 }
 
 /**
@@ -45,7 +45,7 @@ export function easeOutQuintic(t: number): number {
  * can be differenced/interpolated smoothly across the whole spin.
  */
 export function spinPositionAt(realStart: number, distance: number, t: number): number {
-  return realStart + distance * easeOutQuintic(t);
+  return realStart + distance * easeOutSeptic(t);
 }
 
 export interface CarouselSlotStyle {
@@ -96,6 +96,42 @@ export function spinSlotStyle(distance: number, anchors: SpinSizeAnchor[]): Caro
     }
   }
   return { widthPx: 0, opacity: 0 };
+}
+
+/**
+ * Cumulative horizontal offset (px) of a card at continuous `distance`
+ * slots from center, from the exact center point. Built by summing each
+ * pair of adjacent anchors' half-widths plus `gapPx` — the same math a
+ * flex row with `gap-3` produces — so this matches the steady-state
+ * view's actual card positions exactly at every *integer* distance,
+ * where the spin hands off to it, not just approximately.
+ *
+ * This is what keeps the center card pinned to the true center for the
+ * whole spin: positioning cards via flex layout (auto-centered based on
+ * total row width) only centers correctly when the visible cards'
+ * widths are exactly symmetric, which is only true exactly at integer
+ * positions — at every other fractional moment during the spin, the
+ * asymmetric in-between widths pull the flex-centered midpoint away from
+ * the actual center card, causing a visible drift right up to landing.
+ */
+export function spinOffsetPx(distance: number, anchors: SpinSizeAnchor[], gapPx: number): number {
+  const sign = distance < 0 ? -1 : 1;
+  const d = Math.abs(distance);
+  const checkpoints = [0];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [, w0] = anchors[i];
+    const [, w1] = anchors[i + 1];
+    checkpoints.push(checkpoints[i] + w0 / 2 + gapPx + w1 / 2);
+  }
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [d0] = anchors[i];
+    const [d1] = anchors[i + 1];
+    if (d <= d1) {
+      const t = (d - d0) / (d1 - d0);
+      return sign * (checkpoints[i] + (checkpoints[i + 1] - checkpoints[i]) * t);
+    }
+  }
+  return sign * checkpoints[checkpoints.length - 1];
 }
 
 export interface SpinSlot {
