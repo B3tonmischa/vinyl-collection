@@ -31,6 +31,9 @@ export interface DiscogsArtistCredit {
   // ArtistsService.
   name: string;
   anv?: string;
+  // Only meaningful on a tracklist item's extraartists[] (e.g. "Featuring",
+  // "Vocals", "Producer") — absent on a release's/track's own artists[].
+  role?: string;
 }
 
 export interface DiscogsLabel {
@@ -53,6 +56,12 @@ export interface DiscogsTracklistItem {
   // Present only when this track's artist differs from the release's own —
   // absence means "inherits", matching this app's own zero-rows semantics.
   artists?: DiscogsArtistCredit[];
+  // Additional per-track credits Discogs tracks separately from `artists`
+  // (each with a `role`, e.g. "Featuring", "Vocals", "Producer", "Mixed
+  // By") — this is where guest/featuring credits usually live when the
+  // track's own `artists` is empty. See discogs-track-parser.ts for which
+  // roles get folded into the track's artist override.
+  extraartists?: DiscogsArtistCredit[];
   sub_tracks?: DiscogsTracklistItem[];
 }
 

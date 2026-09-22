@@ -130,10 +130,24 @@ export class ImportService {
     const tracks: NonNullable<CreateVinylDto['tracks']> = [];
     for (const track of parsedTracks) {
       let artistIds: number[] | undefined;
-      if (track.artistNames) {
-        const trackArtists = await this.resolveArtists(
-          track.artistNames.map((name) => ({ name })),
-        );
+      if (track.artistNames || track.featuringArtistNames) {
+        // A track's own `artists[]` (when present) replaces the album's
+        // artists, same as before. But Discogs typically leaves `artists[]`
+        // empty for a featuring credit and puts it in `extraartists[]`
+        // instead (see discogs-track-parser.ts / KAN-13) — in that case the
+        // track still inherits the album's own artist(s), so fold those in
+        // as the base rather than losing them under just the guest.
+        const ownArtists = track.artistNames
+          ? await this.resolveArtists(track.artistNames.map((name) => ({ name })))
+          : albumArtists;
+        const featuringArtists = track.featuringArtistNames
+          ? await this.resolveArtists(track.featuringArtistNames.map((name) => ({ name })))
+          : [];
+        const merged = new Map<string, { id: number; name: string }>();
+        for (const artist of [...ownArtists, ...featuringArtists]) {
+          merged.set(artist.name.toLowerCase(), artist);
+        }
+        const trackArtists = [...merged.values()];
         const trackNames = nameSet(trackArtists.map((a) => a.name));
         const matchesAlbum =
           trackNames.size === albumArtistNames.size &&

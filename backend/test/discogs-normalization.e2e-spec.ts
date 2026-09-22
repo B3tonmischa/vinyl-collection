@@ -52,9 +52,9 @@ describe('parseDiscogsTracklist', () => {
       { position: 'B1', title: 'Money' },
     ]);
     expect(result).toEqual([
-      { position: 1, title: 'Speak to Me', side: 'A', artistNames: null },
-      { position: 2, title: 'Breathe', side: 'A', artistNames: null },
-      { position: 3, title: 'Money', side: 'B', artistNames: null },
+      { position: 1, title: 'Speak to Me', side: 'A', artistNames: null, featuringArtistNames: null },
+      { position: 2, title: 'Breathe', side: 'A', artistNames: null, featuringArtistNames: null },
+      { position: 3, title: 'Money', side: 'B', artistNames: null, featuringArtistNames: null },
     ]);
   });
 
@@ -63,7 +63,9 @@ describe('parseDiscogsTracklist', () => {
       { position: '', type_: 'heading', title: 'Side A' },
       { position: 'A1', type_: 'track', title: 'Intro' },
     ]);
-    expect(result).toEqual([{ position: 1, title: 'Intro', side: 'A', artistNames: null }]);
+    expect(result).toEqual([
+      { position: 1, title: 'Intro', side: 'A', artistNames: null, featuringArtistNames: null },
+    ]);
   });
 
   it('flattens sub_tracks nested under a heading, using the running order across the whole flattened list', () => {
@@ -80,15 +82,23 @@ describe('parseDiscogsTracklist', () => {
       { position: 'A4', title: 'Next Track' },
     ]);
     expect(result).toEqual([
-      { position: 1, title: 'Part 1', side: 'A', artistNames: null },
-      { position: 2, title: 'Part 2', side: 'A', artistNames: null },
-      { position: 3, title: 'Next Track', side: 'A', artistNames: null },
+      { position: 1, title: 'Part 1', side: 'A', artistNames: null, featuringArtistNames: null },
+      { position: 2, title: 'Part 2', side: 'A', artistNames: null, featuringArtistNames: null },
+      {
+        position: 3,
+        title: 'Next Track',
+        side: 'A',
+        artistNames: null,
+        featuringArtistNames: null,
+      },
     ]);
   });
 
   it('treats an item with no type_ at all as a real track (older/smaller releases often omit it)', () => {
     const result = parseDiscogsTracklist([{ position: '1', title: 'Only Track' }]);
-    expect(result).toEqual([{ position: 1, title: 'Only Track', side: null, artistNames: null }]);
+    expect(result).toEqual([
+      { position: 1, title: 'Only Track', side: null, artistNames: null, featuringArtistNames: null },
+    ]);
   });
 
   it('captures per-track artist credits as artistNames, distinct from the inherit-by-default null', () => {
@@ -102,5 +112,61 @@ describe('parseDiscogsTracklist', () => {
 
   it('returns an empty list for an empty/missing tracklist', () => {
     expect(parseDiscogsTracklist([])).toEqual([]);
+  });
+
+  it('captures a "Featuring" extraartists credit as featuringArtistNames even when artists[] is empty', () => {
+    const result = parseDiscogsTracklist([
+      {
+        position: 'A2',
+        title: 'Love Of My Life',
+        extraartists: [{ id: 9, name: 'Dave Matthews', role: 'Featuring' }],
+      },
+    ]);
+    expect(result[0].artistNames).toBeNull();
+    expect(result[0].featuringArtistNames).toEqual(['Dave Matthews']);
+  });
+
+  it('captures a "Vocals" extraartists credit as featuringArtistNames', () => {
+    const result = parseDiscogsTracklist([
+      {
+        position: 'B1',
+        title: 'Smooth',
+        extraartists: [{ id: 10, name: 'Rob Thomas', role: 'Vocals' }],
+      },
+    ]);
+    expect(result[0].featuringArtistNames).toEqual(['Rob Thomas']);
+  });
+
+  it('collects multiple featuring-like extraartists credits on one track', () => {
+    const result = parseDiscogsTracklist([
+      {
+        position: 'B2',
+        title: 'Do You Like The Way',
+        extraartists: [
+          { id: 11, name: 'Cee-Lo', role: 'Featuring' },
+          { id: 12, name: 'Lauryn Hill', role: 'Featuring' },
+        ],
+      },
+    ]);
+    expect(result[0].featuringArtistNames).toEqual(['Cee-Lo', 'Lauryn Hill']);
+  });
+
+  it('excludes non-performing extraartists roles like Producer or Mixed By', () => {
+    const result = parseDiscogsTracklist([
+      {
+        position: 'A1',
+        title: 'No Guests',
+        extraartists: [
+          { id: 13, name: 'Some Producer', role: 'Producer' },
+          { id: 14, name: 'Some Engineer', role: 'Mixed By' },
+        ],
+      },
+    ]);
+    expect(result[0].featuringArtistNames).toBeNull();
+  });
+
+  it('leaves featuringArtistNames null when extraartists is absent', () => {
+    const result = parseDiscogsTracklist([{ position: 'A1', title: 'Plain Track' }]);
+    expect(result[0].featuringArtistNames).toBeNull();
   });
 });
