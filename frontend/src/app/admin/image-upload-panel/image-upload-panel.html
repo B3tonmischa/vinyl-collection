@@ -58,20 +58,10 @@
                   type="button"
                   (click)="toggleSwapSelection(slot)"
                   [attr.aria-pressed]="isSwapSelected(slot)"
-                  [class]="
-                    'absolute inset-0 focus:outline-none' +
-                    (isSwapSelected(slot) ? ' bg-indigo-500 opacity-40' : ' bg-black/0 hover:bg-black/20')
-                  "
+                  class="absolute inset-0 bg-black/0 hover:bg-black/20 focus:outline-none"
                 >
                   <span class="sr-only">Select {{ slot.label }} for swap</span>
                 </button>
-                @if (isSwapSelected(slot)) {
-                  <span
-                    class="pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow"
-                  >
-                    {{ swapSelectionNumber(slot) }}
-                  </span>
-                }
               }
             }
           </div>
@@ -127,20 +117,10 @@
                   type="button"
                   (click)="toggleSwapSelection(slot)"
                   [attr.aria-pressed]="isSwapSelected(slot)"
-                  [class]="
-                    'absolute inset-0 focus:outline-none' +
-                    (isSwapSelected(slot) ? ' bg-indigo-500 opacity-40' : ' bg-black/0 hover:bg-black/20')
-                  "
+                  class="absolute inset-0 bg-black/0 hover:bg-black/20 focus:outline-none"
                 >
                   <span class="sr-only">Select {{ slot.label }} for swap</span>
                 </button>
-                @if (isSwapSelected(slot)) {
-                  <span
-                    class="pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow"
-                  >
-                    {{ swapSelectionNumber(slot) }}
-                  </span>
-                }
               }
             }
           </div>
