@@ -4,24 +4,18 @@
     (pointerdown)="onPointerDown($event)"
     (pointerup)="onPointerUp($event)"
   >
-    <div
-      class="flex items-center gap-3"
-      [class.animate-carousel-roll-in]="rollingIn()"
-      [style.--carousel-roll-in-duration.ms]="rollInDuration"
-    >
-      @for (item of windowCards(); track item.index) {
-        <button
-          type="button"
-          class="shrink-0 cursor-pointer transition-all duration-300 ease-out"
-          [class]="cardSizeClass(item.offset)"
-          (click)="onCardClick(item)"
-        >
-          <app-vinyl-card [vinyl]="item.vinyl" />
-        </button>
-      } @empty {
-        <p class="text-sm text-neutral-400">Your collection is empty — add your first record from the admin panel.</p>
-      }
-    </div>
+    @for (item of windowCards(); track item.index) {
+      <button
+        type="button"
+        class="shrink-0 cursor-pointer transition-all duration-300 ease-out"
+        [class]="cardSizeClass(item.offset)"
+        (click)="onCardClick(item)"
+      >
+        <app-vinyl-card [vinyl]="item.vinyl" />
+      </button>
+    } @empty {
+      <p class="text-sm text-neutral-400">Your collection is empty — add your first record from the admin panel.</p>
+    }
   </div>
 
   <div class="flex shrink-0 justify-center gap-4 py-3">

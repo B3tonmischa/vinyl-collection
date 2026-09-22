@@ -18,12 +18,35 @@ export function randomIndex(length: number, rng: () => number = Math.random): nu
 }
 
 /**
- * Duration (ms) of the carousel's roll-in animation on landing. Tweak the
+ * Duration (ms) of the carousel's roll-in spin on landing. Tweak the
  * constant to adjust the feel. Reduced-motion preference skips the
  * animation entirely (0 = no animation).
  */
 export function rollInDurationMs(reducedMotion: boolean): number {
   return reducedMotion ? 0 : 2400;
+}
+
+/**
+ * Delays (ms) between each single-step advance of the roll-in "spin" —
+ * as if someone were clicking "next" rapidly, then easing off. Delays
+ * grow quadratically so the spin starts fast and decelerates to a stop,
+ * and the whole sequence sums to approximately `totalDurationMs`.
+ */
+export function spinTickDelays(totalDurationMs: number, tickCount: number): number[] {
+  if (tickCount <= 0 || totalDurationMs <= 0) return [];
+  const weights = Array.from({ length: tickCount }, (_, i) => (i + 1) ** 3);
+  const weightSum = weights.reduce((sum, w) => sum + w, 0);
+  return weights.map((w) => Math.round((w / weightSum) * totalDurationMs));
+}
+
+/**
+ * The index to start the roll-in spin from so that `tickCount` forward
+ * single-step advances land exactly on `target`. Wraps around short
+ * collections, so even a handful of records visibly cycle past a few
+ * times before settling — like a wheel-of-fortune spin.
+ */
+export function spinStartIndex(target: number, length: number, tickCount: number): number {
+  return wrapIndex(target - tickCount, length);
 }
 
 /**

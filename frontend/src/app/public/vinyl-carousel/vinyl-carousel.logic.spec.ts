@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { computeWindow, randomIndex, rollInDurationMs, wrapIndex } from './vinyl-carousel.logic';
+import {
+  computeWindow,
+  randomIndex,
+  rollInDurationMs,
+  spinStartIndex,
+  spinTickDelays,
+  wrapIndex,
+} from './vinyl-carousel.logic';
 
 describe('wrapIndex', () => {
   it('returns the index unchanged when already in range', () => {
@@ -48,6 +55,54 @@ describe('rollInDurationMs', () => {
 
   it('returns zero (skip the animation) when reduced motion is preferred', () => {
     expect(rollInDurationMs(true)).toBe(0);
+  });
+});
+
+describe('spinTickDelays', () => {
+  it('returns an empty schedule when there are no ticks or no duration', () => {
+    expect(spinTickDelays(2400, 0)).toEqual([]);
+    expect(spinTickDelays(0, 24)).toEqual([]);
+  });
+
+  it('produces one delay per tick that sums to roughly the total duration', () => {
+    const delays = spinTickDelays(2400, 24);
+    expect(delays).toHaveLength(24);
+    const sum = delays.reduce((a, b) => a + b, 0);
+    expect(sum).toBeGreaterThanOrEqual(2350);
+    expect(sum).toBeLessThanOrEqual(2450);
+  });
+
+  it('decelerates: each delay is at least as long as the previous one', () => {
+    const delays = spinTickDelays(2400, 24);
+    for (let i = 1; i < delays.length; i++) {
+      expect(delays[i]).toBeGreaterThanOrEqual(delays[i - 1]);
+    }
+  });
+
+  it('starts near-instant and ends with a clearly longer pause before landing', () => {
+    const delays = spinTickDelays(2400, 24);
+    expect(delays[0]).toBeLessThan(10);
+    expect(delays[delays.length - 1]).toBeGreaterThan(200);
+  });
+});
+
+describe('spinStartIndex', () => {
+  it('picks a start index that reaches target after tickCount forward steps', () => {
+    const target = 6;
+    const length = 10;
+    const tickCount = 24;
+    const start = spinStartIndex(target, length, tickCount);
+    let center = start;
+    for (let i = 0; i < tickCount; i++) {
+      center = wrapIndex(center + 1, length);
+    }
+    expect(center).toBe(target);
+  });
+
+  it('wraps correctly for short collections so the spin still cycles through them', () => {
+    const start = spinStartIndex(1, 3, 24);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(start).toBeLessThan(3);
   });
 });
 

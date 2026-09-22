@@ -2,7 +2,17 @@ import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject
 import { Router } from '@angular/router';
 import { Vinyl } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
-import { computeWindow, randomIndex, rollInDurationMs } from './vinyl-carousel.logic';
+import {
+  computeWindow,
+  randomIndex,
+  rollInDurationMs,
+  spinStartIndex,
+  spinTickDelays,
+  wrapIndex,
+} from './vinyl-carousel.logic';
+
+/** Number of single-step advances the roll-in spin makes before landing. */
+const SPIN_TICK_COUNT = 24;
 
 /**
  * Default (no-search) browse view: a horizontal carousel closer to
@@ -23,27 +33,6 @@ import { computeWindow, randomIndex, rollInDurationMs } from './vinyl-carousel.l
     '(keydown.ArrowLeft)': 'prev()',
     '(keydown.ArrowRight)': 'next()',
   },
-  styles: [
-    `
-      @keyframes carousel-roll-in {
-        from {
-          transform: translateX(-45%);
-          opacity: 0;
-        }
-        60% {
-          opacity: 1;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-
-      .animate-carousel-roll-in {
-        animation: carousel-roll-in var(--carousel-roll-in-duration, 2400ms) cubic-bezier(0, 0, 0.2, 1) both;
-      }
-    `,
-  ],
 })
 export class VinylCarouselComponent {
   private readonly router = inject(Router);
@@ -53,17 +42,18 @@ export class VinylCarouselComponent {
   private readonly _center = signal<number | null>(null);
 
   private readonly reducedMotion =
-    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  protected readonly rollInDuration = rollInDurationMs(this.reducedMotion);
-  protected readonly rollingIn = signal(false);
+  /** True while the roll-in spin is running; manual navigation is ignored until it lands. */
+  protected readonly spinning = signal(false);
 
   @Input({ required: true })
   set vinyls(value: Vinyl[]) {
     this._vinyls.set(value);
     if (value.length > 0 && this._center() === null) {
-      this._center.set(randomIndex(value.length));
-      this.startRollIn();
+      this.startRollIn(randomIndex(value.length), value.length);
     }
   }
 
@@ -81,6 +71,7 @@ export class VinylCarouselComponent {
   }
 
   protected onCardClick(item: { offset: number; index: number }): void {
+    if (this.spinning()) return;
     if (item.offset === 0) {
       this.openCentered();
     } else {
@@ -97,6 +88,7 @@ export class VinylCarouselComponent {
   }
 
   private shift(delta: number): void {
+    if (this.spinning()) return;
     const list = this._vinyls();
     const center = this._center();
     if (center === null || list.length === 0) return;
@@ -113,10 +105,32 @@ export class VinylCarouselComponent {
     }
   }
 
-  private startRollIn(): void {
-    if (this.reducedMotion) return;
-    this.rollingIn.set(true);
-    const timeout = setTimeout(() => this.rollingIn.set(false), this.rollInDuration);
+  /**
+   * Spins the carousel onto `target` like someone clicking "next" fast and
+   * easing off — single-step advances with growing delays between them —
+   * instead of snapping straight to the randomly-chosen center.
+   */
+  private startRollIn(target: number, length: number): void {
+    if (this.reducedMotion) {
+      this._center.set(target);
+      return;
+    }
+    this._center.set(spinStartIndex(target, length, SPIN_TICK_COUNT));
+    this.spinning.set(true);
+    this.runSpinTicks(spinTickDelays(rollInDurationMs(false), SPIN_TICK_COUNT), length);
+  }
+
+  private runSpinTicks(delays: number[], length: number): void {
+    if (delays.length === 0) {
+      this.spinning.set(false);
+      return;
+    }
+    const [delay, ...rest] = delays;
+    const timeout = setTimeout(() => {
+      const center = this._center() ?? 0;
+      this._center.set(wrapIndex(center + 1, length));
+      this.runSpinTicks(rest, length);
+    }, delay);
     this.destroyRef.onDestroy(() => clearTimeout(timeout));
   }
 
@@ -127,6 +141,7 @@ export class VinylCarouselComponent {
   }
 
   protected onPointerUp(event: PointerEvent): void {
+    if (this.spinning()) return;
     if (this.dragStartX === null) return;
     const delta = event.clientX - this.dragStartX;
     this.dragStartX = null;
