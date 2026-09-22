@@ -10,12 +10,14 @@
     </div>
   }
 </div>
-<div class="mt-2 min-w-0">
-  <p class="truncate text-sm font-medium text-neutral-900">{{ vinyl.title }}</p>
-  <p class="truncate text-xs text-neutral-500">
-    {{ artistNames || 'Unknown artist' }}
-    @if (vinyl.year) {
-      <span> · {{ vinyl.year }}</span>
-    }
-  </p>
-</div>
+@if (showCaption) {
+  <div class="mt-2 min-w-0">
+    <p class="truncate text-sm font-medium text-neutral-900">{{ vinyl.title }}</p>
+    <p class="truncate text-xs text-neutral-500">
+      {{ artistNames || 'Unknown artist' }}
+      @if (vinyl.year) {
+        <span> · {{ vinyl.year }}</span>
+      }
+    </p>
+  </div>
+}

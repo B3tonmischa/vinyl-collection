@@ -15,6 +15,8 @@ import { Vinyl } from '../../models/vinyl.model';
 })
 export class VinylCardComponent {
   @Input({ required: true }) vinyl!: Vinyl;
+  /** Hide the title/artist caption — used by the carousel's roll-in spin, where fast-changing text is just noise. */
+  @Input() showCaption = true;
 
   private readonly apiConfig = inject(ApiConfigService);
 

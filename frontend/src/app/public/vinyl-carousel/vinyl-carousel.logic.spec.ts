@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeWindow,
+  easeOutQuintic,
   randomIndex,
   rollInDurationMs,
-  spinStartIndex,
-  spinTickDelays,
+  spinPositionAt,
+  spinSlotStyle,
+  spinSlots,
   wrapIndex,
 } from './vinyl-carousel.logic';
 
@@ -58,51 +60,101 @@ describe('rollInDurationMs', () => {
   });
 });
 
-describe('spinTickDelays', () => {
-  it('returns an empty schedule when there are no ticks or no duration', () => {
-    expect(spinTickDelays(2400, 0)).toEqual([]);
-    expect(spinTickDelays(0, 24)).toEqual([]);
+describe('easeOutQuintic', () => {
+  it('starts at 0 and ends at 1', () => {
+    expect(easeOutQuintic(0)).toBe(0);
+    expect(easeOutQuintic(1)).toBe(1);
   });
 
-  it('produces one delay per tick that sums to roughly the total duration', () => {
-    const delays = spinTickDelays(2400, 24);
-    expect(delays).toHaveLength(24);
-    const sum = delays.reduce((a, b) => a + b, 0);
-    expect(sum).toBeGreaterThanOrEqual(2350);
-    expect(sum).toBeLessThanOrEqual(2450);
+  it('clamps outside [0, 1]', () => {
+    expect(easeOutQuintic(-1)).toBe(0);
+    expect(easeOutQuintic(2)).toBe(1);
   });
 
-  it('decelerates: each delay is at least as long as the previous one', () => {
-    const delays = spinTickDelays(2400, 24);
-    for (let i = 1; i < delays.length; i++) {
-      expect(delays[i]).toBeGreaterThanOrEqual(delays[i - 1]);
+  it('is monotonically increasing', () => {
+    let prev = -Infinity;
+    for (let t = 0; t <= 1; t += 0.1) {
+      const value = easeOutQuintic(t);
+      expect(value).toBeGreaterThanOrEqual(prev);
+      prev = value;
     }
   });
 
-  it('starts near-instant and ends with a clearly longer pause before landing', () => {
-    const delays = spinTickDelays(2400, 24);
-    expect(delays[0]).toBeLessThan(10);
-    expect(delays[delays.length - 1]).toBeGreaterThan(200);
+  it('decelerates: covers most of the distance early, coasting in at the end', () => {
+    // A hard "coast to a stop" tail: by the halfway mark in time, it's
+    // already most of the way there, then the last stretch is much slower.
+    expect(easeOutQuintic(0.5)).toBeGreaterThan(0.9);
+    const remainingAfterHalf = 1 - easeOutQuintic(0.5);
+    const remainingAfterNinety = 1 - easeOutQuintic(0.9);
+    expect(remainingAfterNinety).toBeLessThan(remainingAfterHalf);
   });
 });
 
-describe('spinStartIndex', () => {
-  it('picks a start index that reaches target after tickCount forward steps', () => {
-    const target = 6;
-    const length = 10;
-    const tickCount = 24;
-    const start = spinStartIndex(target, length, tickCount);
-    let center = start;
-    for (let i = 0; i < tickCount; i++) {
-      center = wrapIndex(center + 1, length);
-    }
-    expect(center).toBe(target);
+describe('spinPositionAt', () => {
+  it('starts at realStart and lands exactly on realStart + distance', () => {
+    expect(spinPositionAt(-14, 20, 0)).toBe(-14);
+    expect(spinPositionAt(-14, 20, 1)).toBe(6);
   });
 
-  it('wraps correctly for short collections so the spin still cycles through them', () => {
-    const start = spinStartIndex(1, 3, 24);
-    expect(start).toBeGreaterThanOrEqual(0);
-    expect(start).toBeLessThan(3);
+  it('is monotonically increasing over t for a positive distance', () => {
+    let prev = -Infinity;
+    for (let t = 0; t <= 1; t += 0.1) {
+      const value = spinPositionAt(0, 20, t);
+      expect(value).toBeGreaterThanOrEqual(prev);
+      prev = value;
+    }
+  });
+});
+
+describe('spinSlotStyle', () => {
+  it('is largest and fully opaque at distance 0', () => {
+    expect(spinSlotStyle(0)).toEqual({ widthPx: 224, opacity: 1 });
+  });
+
+  it('shrinks to nothing by distance 3, symmetrically in both directions', () => {
+    expect(spinSlotStyle(3)).toEqual({ widthPx: 0, opacity: 0 });
+    expect(spinSlotStyle(-3)).toEqual({ widthPx: 0, opacity: 0 });
+  });
+
+  it('interpolates smoothly between anchors rather than snapping', () => {
+    const atHalf = spinSlotStyle(0.5);
+    expect(atHalf.widthPx).toBeGreaterThan(spinSlotStyle(1).widthPx);
+    expect(atHalf.widthPx).toBeLessThan(spinSlotStyle(0).widthPx);
+  });
+
+  it('shrinks monotonically as distance grows', () => {
+    let prevWidth = Infinity;
+    for (let d = 0; d <= 3; d += 0.25) {
+      const { widthPx } = spinSlotStyle(d);
+      expect(widthPx).toBeLessThanOrEqual(prevWidth);
+      prevWidth = widthPx;
+    }
+  });
+});
+
+describe('spinSlots', () => {
+  it('returns 2*radius + 1 slots centered on the fractional position', () => {
+    const slots = spinSlots(4.3, 10, 3);
+    expect(slots).toHaveLength(7);
+    expect(slots.map((s) => s.virtualIndex)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it('derives distance from the fractional part of position', () => {
+    const slots = spinSlots(4.3, 10, 1);
+    // base = 4, frac = 0.3 -> distances are k - frac for k in [-1, 0, 1]
+    expect(slots.map((s) => Number(s.distance.toFixed(2)))).toEqual([-1.3, -0.3, 0.7]);
+  });
+
+  it('wraps virtual indices into valid list indices', () => {
+    const slots = spinSlots(0.5, 3, 3);
+    for (const slot of slots) {
+      expect(slot.index).toBeGreaterThanOrEqual(0);
+      expect(slot.index).toBeLessThan(3);
+    }
+  });
+
+  it('returns nothing for an empty collection', () => {
+    expect(spinSlots(0, 0, 3)).toEqual([]);
   });
 });
 

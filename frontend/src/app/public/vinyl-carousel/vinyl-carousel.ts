@@ -2,17 +2,12 @@ import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject
 import { Router } from '@angular/router';
 import { Vinyl } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
-import {
-  computeWindow,
-  randomIndex,
-  rollInDurationMs,
-  spinStartIndex,
-  spinTickDelays,
-  wrapIndex,
-} from './vinyl-carousel.logic';
+import { computeWindow, randomIndex, rollInDurationMs, spinPositionAt, spinSlotStyle, spinSlots } from './vinyl-carousel.logic';
 
-/** Number of single-step advances the roll-in spin makes before landing. */
-const SPIN_TICK_COUNT = 24;
+/** How many virtual slots (not wraps) the roll-in spin travels before landing. */
+const SPIN_DISTANCE = 20;
+/** How many slots either side of center the spin filmstrip renders. */
+const SPIN_SLOT_RADIUS = 3;
 
 /**
  * Default (no-search) browse view: a horizontal carousel closer to
@@ -48,6 +43,8 @@ export class VinylCarouselComponent {
 
   /** True while the roll-in spin is running; manual navigation is ignored until it lands. */
   protected readonly spinning = signal(false);
+  /** Continuous fractional center position, only meaningful while spinning. */
+  private readonly spinPosition = signal<number | null>(null);
 
   @Input({ required: true })
   set vinyls(value: Vinyl[]) {
@@ -62,6 +59,15 @@ export class VinylCarouselComponent {
     const center = this._center();
     if (center === null || list.length === 0) return [];
     return computeWindow(center, list.length).map((item) => ({ ...item, vinyl: list[item.index] }));
+  });
+
+  protected readonly spinCards = computed(() => {
+    const list = this._vinyls();
+    const position = this.spinPosition();
+    if (position === null || list.length === 0) return [];
+    return spinSlots(position, list.length, SPIN_SLOT_RADIUS)
+      .map((slot) => ({ ...slot, vinyl: list[slot.index], style: spinSlotStyle(slot.distance) }))
+      .filter((slot) => slot.style.opacity > 0.001);
   });
 
   protected cardSizeClass(offset: number): string {
@@ -106,32 +112,35 @@ export class VinylCarouselComponent {
   }
 
   /**
-   * Spins the carousel onto `target` like someone clicking "next" fast and
-   * easing off — single-step advances with growing delays between them —
-   * instead of snapping straight to the randomly-chosen center.
+   * Spins the carousel onto `target` with one continuous, decelerating
+   * motion — a `requestAnimationFrame` loop driving a fractional position
+   * — instead of discrete steps. Each frame just reads the eased position
+   * directly, so there's nothing to restart or pause between frames.
    */
   private startRollIn(target: number, length: number): void {
     if (this.reducedMotion) {
       this._center.set(target);
       return;
     }
-    this._center.set(spinStartIndex(target, length, SPIN_TICK_COUNT));
+    const duration = rollInDurationMs(false);
+    const realStart = target - SPIN_DISTANCE;
+    this.spinPosition.set(realStart);
     this.spinning.set(true);
-    this.runSpinTicks(spinTickDelays(rollInDurationMs(false), SPIN_TICK_COUNT), length);
-  }
 
-  private runSpinTicks(delays: number[], length: number): void {
-    if (delays.length === 0) {
-      this.spinning.set(false);
-      return;
-    }
-    const [delay, ...rest] = delays;
-    const timeout = setTimeout(() => {
-      const center = this._center() ?? 0;
-      this._center.set(wrapIndex(center + 1, length));
-      this.runSpinTicks(rest, length);
-    }, delay);
-    this.destroyRef.onDestroy(() => clearTimeout(timeout));
+    const startTime = performance.now();
+    const tick = (now: number) => {
+      const t = (now - startTime) / duration;
+      if (t >= 1) {
+        this.spinPosition.set(null);
+        this._center.set(target);
+        this.spinning.set(false);
+        return;
+      }
+      this.spinPosition.set(spinPositionAt(realStart, SPIN_DISTANCE, t));
+      rafId = requestAnimationFrame(tick);
+    };
+    let rafId = requestAnimationFrame(tick);
+    this.destroyRef.onDestroy(() => cancelAnimationFrame(rafId));
   }
 
   private dragStartX: number | null = null;
