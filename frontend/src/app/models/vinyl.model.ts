@@ -51,6 +51,7 @@ export interface Vinyl {
   speed: Speed | null;
   genre: string | null;
   notes: string | null;
+  signedByArtist: boolean;
   artists: Artist[];
   tracks: Track[];
   images: VinylImage[];
@@ -67,6 +68,7 @@ export interface VinylPayload {
   speed?: Speed | null;
   genre?: string | null;
   notes?: string | null;
+  signedByArtist?: boolean;
   /** Omitting leaves existing artists alone (on update); providing replaces the set fully. */
   artistIds?: number[];
   /** Omitting leaves existing tracks alone (on update); providing replaces the set fully. */

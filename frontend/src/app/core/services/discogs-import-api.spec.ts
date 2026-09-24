@@ -30,6 +30,7 @@ const sampleImportedVinyl: ImportedVinyl = {
   speed: 'RPM_33',
   genre: 'Rock',
   notes: null,
+  signedByArtist: false,
   artists: [{ id: 1, name: 'Radiohead' }],
   tracks: [],
   images: [],
