@@ -6,10 +6,11 @@ import { AuthService } from '../../core/services/auth';
 import { ToastService } from '../../core/services/toast';
 import { ImportedVinyl } from '../../core/services/discogs-import-api';
 import { DiscogsImportDialogComponent } from '../discogs-import-dialog/discogs-import-dialog';
+import { ScrollToTop } from '../../shared/scroll-to-top/scroll-to-top';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [RouterLink, RouterOutlet],
+  imports: [RouterLink, RouterOutlet, ScrollToTop],
   templateUrl: './admin-shell.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
