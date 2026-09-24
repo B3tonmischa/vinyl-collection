@@ -1,3 +1,8 @@
 node_modules/
 .claude
 .mcp.*
+# Local MCP config stays untracked; copy .mcp.json.example to .mcp.json.
+# Atlassian must use "type": "http" with the /v1/mcp endpoint -- "sse" fails
+# with HTTP 400 (looks like an auth error, isn't), and /v1/sse is no longer
+# supported by Atlassian after 2026-06-30. Restart Claude Code after editing.
+!.mcp.json.example
