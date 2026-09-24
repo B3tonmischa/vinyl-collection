@@ -53,6 +53,7 @@ export class VinylFormPage {
   protected readonly speed = signal<Speed | ''>('');
   protected readonly genre = signal('');
   protected readonly notes = signal('');
+  protected readonly signedByArtist = signal(false);
   protected readonly artists = signal<Artist[]>([]);
   protected readonly trackRows = signal<TrackFormRow[]>([]);
 
@@ -90,6 +91,7 @@ export class VinylFormPage {
     this.speed.set(vinyl.speed ?? '');
     this.genre.set(vinyl.genre ?? '');
     this.notes.set(vinyl.notes ?? '');
+    this.signedByArtist.set(vinyl.signedByArtist);
     this.artists.set(vinyl.artists);
     this.trackRows.set(
       [...vinyl.tracks]
@@ -117,6 +119,7 @@ export class VinylFormPage {
       speed: this.speed() || null,
       genre: this.genre().trim() || null,
       notes: this.notes().trim() || null,
+      signedByArtist: this.signedByArtist(),
       artistIds: this.artists().map((a) => a.id),
       tracks: this.trackRows().map(trackRowToPayload),
     };

@@ -41,25 +41,27 @@ enum ImageKind {
 }
 
 model Vinyl {
-  id            Int           @id @default(autoincrement())
-  title         String
-  year          Int?
-  label         String?
-  catalogNumber String?
+  id             Int           @id @default(autoincrement())
+  title          String
+  year           Int?
+  label          String?
+  catalogNumber  String?
   // format, split into three independent, optional facets (see architecture-review-implementation-plan.md #2).
-  releaseType   ReleaseType?
-  discSize      DiscSize?
-  speed         Speed?
-  genre         String?
-  notes         String?
-  artists       VinylArtist[]
-  tracks        Track[]
-  images        VinylImage[]
+  releaseType    ReleaseType?
+  discSize       DiscSize?
+  speed          Speed?
+  genre          String?
+  notes          String?
+  // Simple yes/no flag, not a record of who signed it.
+  signedByArtist Boolean       @default(false)
+  artists        VinylArtist[]
+  tracks         Track[]
+  images         VinylImage[]
   // Soft delete: a "delete" sets this instead of removing the row. All read
   // queries (list, detail, search, image serving) filter deletedAt: null.
-  deletedAt     DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([title])
 }

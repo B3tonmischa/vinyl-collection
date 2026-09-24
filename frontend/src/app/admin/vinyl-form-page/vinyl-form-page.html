@@ -111,6 +111,16 @@
             (input)="notes.set($any($event.target).value)"
           ></textarea>
         </label>
+
+        <label class="col-span-2 flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-neutral-300"
+            [checked]="signedByArtist()"
+            (change)="signedByArtist.set($any($event.target).checked)"
+          />
+          <span class="text-sm font-medium text-neutral-700">Signed by artist</span>
+        </label>
       </div>
 
       <div>

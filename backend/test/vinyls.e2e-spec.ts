@@ -64,6 +64,28 @@ describe('Vinyl CRUD', () => {
     expect(res.body.tracks[0]).toMatchObject({ position: 1, title: 'Airbag', side: 'A' });
   });
 
+  it('defaults signedByArtist to false, and persists it on create and update', async () => {
+    const unsigned = await admin.post('/vinyls').send({ title: 'Unsigned' }).expect(201);
+    expect(unsigned.body.signedByArtist).toBe(false);
+
+    const signed = await admin
+      .post('/vinyls')
+      .send({ title: 'Signed', signedByArtist: true })
+      .expect(201);
+    expect(signed.body.signedByArtist).toBe(true);
+
+    await admin
+      .patch(`/vinyls/${unsigned.body.id}`)
+      .send({ signedByArtist: true })
+      .expect(200);
+    const reread = await request(ctx.httpServer).get(`/vinyls/${unsigned.body.id}`).expect(200);
+    expect(reread.body.signedByArtist).toBe(true);
+  });
+
+  it('rejects a non-boolean signedByArtist', async () => {
+    await admin.post('/vinyls').send({ title: 'Y', signedByArtist: 'yes' }).expect(400);
+  });
+
   it('rejects create payloads with unknown fields (whitelist validation)', async () => {
     await admin
       .post('/vinyls')

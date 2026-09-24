@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -53,6 +54,10 @@ export class CreateVinylDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  signedByArtist?: boolean;
 
   // The album's primary artist(s) — ids of existing Artist rows. Look up or
   // create artists first via the /artists endpoints.

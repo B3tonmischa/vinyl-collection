@@ -15,7 +15,16 @@
             }
           </div>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium text-neutral-900">{{ vinyl.title }}</p>
+            <p class="flex items-center gap-2 text-sm font-medium text-neutral-900">
+              <span class="truncate">{{ vinyl.title }}</span>
+              @if (vinyl.signedByArtist) {
+                <span
+                  class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                >
+                  Signed
+                </span>
+              }
+            </p>
             <p class="truncate text-xs text-neutral-500">{{ artistNames(vinyl) }}</p>
           </div>
           <a [routerLink]="['/admin', vinyl.id, 'edit']" class="text-sm text-neutral-600 hover:text-neutral-900">
