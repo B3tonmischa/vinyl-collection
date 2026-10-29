@@ -59,7 +59,7 @@
     "typescript-eslint": "^8.72.1"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=26 <27"
   },
   "overrides": {
     "test-exclude": "^8.0.0",

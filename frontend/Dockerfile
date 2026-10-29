@@ -4,7 +4,7 @@
 # backend/Dockerfile's note on why cross-compiling elsewhere is best
 # avoided even though the frontend itself has no native dependencies.
 
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
