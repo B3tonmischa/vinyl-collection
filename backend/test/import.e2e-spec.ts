@@ -19,9 +19,9 @@ const ONE_PIXEL_PNG = Buffer.from(
 
 function fakeDiscogsClient() {
   return {
-    search: jest.fn<Promise<DiscogsSearchResponse>, any>(),
-    getRelease: jest.fn<Promise<DiscogsRelease>, any>(),
-    downloadImage: jest.fn<Promise<Buffer>, any>().mockResolvedValue(ONE_PIXEL_PNG),
+    search: jest.fn<Promise<DiscogsSearchResponse>, unknown[]>(),
+    getRelease: jest.fn<Promise<DiscogsRelease>, unknown[]>(),
+    downloadImage: jest.fn<Promise<Buffer>, unknown[]>().mockResolvedValue(ONE_PIXEL_PNG),
   };
 }
 
@@ -163,7 +163,7 @@ describe('Discogs import', () => {
 
       // Heading row dropped; three real tracks kept in running order.
       expect(res.body.tracks).toHaveLength(3);
-      expect(res.body.tracks.map((t: any) => t.title)).toEqual([
+      expect(res.body.tracks.map((t: { title: string }) => t.title)).toEqual([
         'Airbag',
         'Paranoid Android',
         'Fitter Happier (feat. Guest)',
@@ -179,7 +179,7 @@ describe('Discogs import', () => {
       // Images went through the real upload pipeline (Sharp resize + WebP),
       // not just a call count — same shape a manual upload produces.
       expect(res.body.images).toHaveLength(2);
-      expect(res.body.images.map((i: any) => i.kind).sort()).toEqual(['COVER_BACK', 'COVER_FRONT']);
+      expect(res.body.images.map((i: { kind: string }) => i.kind).sort()).toEqual(['COVER_BACK', 'COVER_FRONT']);
       expect(discogs.downloadImage).toHaveBeenCalledWith('https://img.discogs.com/primary.jpg');
       expect(discogs.downloadImage).toHaveBeenCalledWith('https://img.discogs.com/secondary-1.jpg');
 

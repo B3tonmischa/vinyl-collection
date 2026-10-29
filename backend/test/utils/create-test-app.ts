@@ -51,6 +51,7 @@ export interface TestAppContext {
   // supertest's own types don't line up with Nest's typed getHttpServer()
   // generic, so tests pass this (typed `any`, like INestApplication's own
   // getHttpServer() signature) to request()/request.agent() instead.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   httpServer: any;
   dbPath: string;
   uploadsDir: string;
