@@ -9,10 +9,11 @@ import {
 } from '../../models/vinyl.model';
 import { DiscGalleryComponent } from '../disc-gallery/disc-gallery';
 import { TracklistComponent } from '../tracklist/tracklist';
+import { ScrollToTop } from '../../shared/scroll-to-top/scroll-to-top';
 
 @Component({
   selector: 'app-vinyl-detail-page',
-  imports: [DiscGalleryComponent, TracklistComponent, RouterLink],
+  imports: [DiscGalleryComponent, TracklistComponent, RouterLink, ScrollToTop],
   templateUrl: './vinyl-detail-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
