@@ -7,3 +7,4 @@ prisma/dev.db-journal
 uploads/*
 !uploads/.gitkeep
 *.log
+test/tmp/

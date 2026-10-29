@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ArtistsService } from '../artists/artists.service';
 import { VinylsService } from '../vinyls/vinyls.service';
-import { UploadsService, ImageKindSlug } from '../uploads/uploads.service';
+import { UploadsService, IMAGE_KIND_SLUGS } from '../uploads/uploads.service';
 import { CreateVinylDto } from '../vinyls/dto/create-vinyl.dto';
 import { DiscogsClient, DiscogsSearchParams } from './discogs-client';
 import { mapDiscogsFormats } from './discogs-format-mapping';
@@ -34,23 +34,6 @@ function stripDisambiguator(name: string): string {
 function nameSet(names: string[]): Set<string> {
   return new Set(names.map((n) => n.toLowerCase()));
 }
-
-// Best-effort, deterministic slot assignment for a release's images (see
-// discogs-import-feature-plan.md open question #1 and its "expect this
-// mapping to be unreliable" caveat): Discogs's API only distinguishes
-// "primary" vs. "secondary" images and doesn't say which secondary image is
-// the back cover vs. an inner sleeve vs. a disc photo. This fills the app's
-// six slots in a fixed order (primary first, then secondaries as they come)
-// and leaves reassigning/removing to the admin afterward via the existing
-// ImageUploadPanel — the same UI a manual upload uses.
-const IMAGE_SLOT_ORDER: ImageKindSlug[] = [
-  'cover-front',
-  'cover-back',
-  'inner-sleeve-a',
-  'inner-sleeve-b',
-  'disc-side-a',
-  'disc-side-b',
-];
 
 @Injectable()
 export class ImportService {
@@ -215,14 +198,22 @@ export class ImportService {
     return [...seen.values()];
   }
 
+  // Best-effort, deterministic slot assignment for a release's images (see
+  // discogs-import-feature-plan.md open question #1 and its "expect this
+  // mapping to be unreliable" caveat): Discogs's API only distinguishes
+  // "primary" vs. "secondary" images and doesn't say which secondary image is
+  // the back cover vs. an inner sleeve vs. a disc photo. This fills the app's
+  // six slots in IMAGE_KIND_SLUGS order (primary first, then secondaries as
+  // they come) and leaves reassigning/removing to the admin afterward via the
+  // existing ImageUploadPanel — the same UI a manual upload uses.
   private async importImages(vinylId: number, images: DiscogsImage[]): Promise<void> {
     const ordered = [...images].sort((a, b) => {
       if (a.type === b.type) return 0;
       return a.type === 'primary' ? -1 : 1;
     });
 
-    for (let i = 0; i < ordered.length && i < IMAGE_SLOT_ORDER.length; i++) {
-      const kindSlug = IMAGE_SLOT_ORDER[i];
+    for (let i = 0; i < ordered.length && i < IMAGE_KIND_SLUGS.length; i++) {
+      const kindSlug = IMAGE_KIND_SLUGS[i];
       const image = ordered[i];
       try {
         const buffer = await this.discogsClient.downloadImage(image.uri);
