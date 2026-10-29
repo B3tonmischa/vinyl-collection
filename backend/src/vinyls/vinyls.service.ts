@@ -26,22 +26,33 @@ function toVinylResponse(vinyl: VinylWithRelations) {
   return {
     ...vinyl,
     artists,
-    tracks: vinyl.tracks
-      .slice()
-      .sort((a, b) => a.position - b.position)
-      .map((track) => {
-        const overrideArtists = track.artists.map((ta) => ta.artist);
-        return {
-          id: track.id,
-          vinylId: track.vinylId,
-          position: track.position,
-          title: track.title,
-          side: track.side,
-          artists: overrideArtists,
-          effectiveArtists: overrideArtists.length > 0 ? overrideArtists : artists,
-        };
-      }),
+    // Already ordered by position via DETAIL_INCLUDE.
+    tracks: vinyl.tracks.map((track) => {
+      const overrideArtists = track.artists.map((ta) => ta.artist);
+      return {
+        id: track.id,
+        vinylId: track.vinylId,
+        position: track.position,
+        title: track.title,
+        side: track.side,
+        artists: overrideArtists,
+        effectiveArtists: overrideArtists.length > 0 ? overrideArtists : artists,
+      };
+    }),
   };
+}
+
+// Nested-create input for a vinyl's tracks, shared by create() and update().
+// A track with no artistIds gets no TrackArtist rows, i.e. it inherits.
+function toTrackCreateInput(tracks: NonNullable<CreateVinylDto['tracks']>) {
+  return tracks.map((track) => ({
+    position: track.position,
+    title: track.title,
+    side: track.side,
+    artists: track.artistIds?.length
+      ? { create: track.artistIds.map((artistId) => ({ artistId })) }
+      : undefined,
+  }));
 }
 
 // Builds a safe FTS5 MATCH expression from free-text user input: pulls out
@@ -135,18 +146,7 @@ export class VinylsService {
           artists: artistIds?.length
             ? { create: artistIds.map((artistId) => ({ artistId })) }
             : undefined,
-          tracks: tracks?.length
-            ? {
-                create: tracks.map((track) => ({
-                  position: track.position,
-                  title: track.title,
-                  side: track.side,
-                  artists: track.artistIds?.length
-                    ? { create: track.artistIds.map((artistId) => ({ artistId })) }
-                    : undefined,
-                })),
-              }
-            : undefined,
+          tracks: tracks?.length ? { create: toTrackCreateInput(tracks) } : undefined,
         },
         include: DETAIL_INCLUDE,
       });
@@ -170,17 +170,7 @@ export class VinylsService {
               : undefined,
           tracks:
             tracks !== undefined
-              ? {
-                  deleteMany: {},
-                  create: tracks.map((track) => ({
-                    position: track.position,
-                    title: track.title,
-                    side: track.side,
-                    artists: track.artistIds?.length
-                      ? { create: track.artistIds.map((artistId) => ({ artistId })) }
-                      : undefined,
-                  })),
-                }
+              ? { deleteMany: {}, create: toTrackCreateInput(tracks) }
               : undefined,
         },
         include: DETAIL_INCLUDE,

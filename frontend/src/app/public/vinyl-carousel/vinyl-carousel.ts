@@ -67,7 +67,7 @@ export class VinylCarouselComponent {
   set vinyls(value: Vinyl[]) {
     this._vinyls.set(value);
     if (value.length > 0 && this._center() === null) {
-      this.startRollIn(randomIndex(value.length), value.length);
+      this.startRollIn(randomIndex(value.length));
     }
   }
 
@@ -139,7 +139,7 @@ export class VinylCarouselComponent {
    * — instead of discrete steps. Each frame just reads the eased position
    * directly, so there's nothing to restart or pause between frames.
    */
-  private startRollIn(target: number, length: number): void {
+  private startRollIn(target: number): void {
     if (this.reducedMotion) {
       this._center.set(target);
       return;

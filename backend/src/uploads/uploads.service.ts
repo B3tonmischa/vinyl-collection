@@ -192,19 +192,15 @@ export class UploadsService {
     kindSlug: ImageKindSlug,
     requestedDiscNumber: number,
   ) {
-    const kind = SLUG_TO_KIND[kindSlug];
-    const discNumber = normalizeDiscNumber(kind, requestedDiscNumber);
-    const existing = await this.prisma.vinylImage.findUnique({
-      where: { vinylId_kind_discNumber: { vinylId, kind, discNumber } },
-    });
-    if (!existing || existing.deletedAt) {
+    const { discNumber, image } = await this.findSlot(vinylId, kindSlug, requestedDiscNumber);
+    if (!image || image.deletedAt) {
       throw new NotFoundException(
         `No ${kindSlug} image (disc ${discNumber}) stored for vinyl ${vinylId}`,
       );
     }
 
     await this.prisma.vinylImage.update({
-      where: { vinylId_kind_discNumber: { vinylId, kind, discNumber } },
+      where: { id: image.id },
       data: { deletedAt: new Date() },
     });
   }
@@ -221,31 +217,29 @@ export class UploadsService {
     b: { kindSlug: ImageKindSlug; discNumber: number },
   ) {
     const kindA = SLUG_TO_KIND[a.kindSlug];
-    const discNumberA = normalizeDiscNumber(kindA, a.discNumber);
     const kindB = SLUG_TO_KIND[b.kindSlug];
-    const discNumberB = normalizeDiscNumber(kindB, b.discNumber);
-
-    if (kindA === kindB && discNumberA === discNumberB) {
+    if (
+      kindA === kindB &&
+      normalizeDiscNumber(kindA, a.discNumber) === normalizeDiscNumber(kindB, b.discNumber)
+    ) {
       throw new BadRequestException('Cannot swap a slot with itself');
     }
 
-    const [imageA, imageB] = await Promise.all([
-      this.prisma.vinylImage.findUnique({
-        where: { vinylId_kind_discNumber: { vinylId, kind: kindA, discNumber: discNumberA } },
-      }),
-      this.prisma.vinylImage.findUnique({
-        where: { vinylId_kind_discNumber: { vinylId, kind: kindB, discNumber: discNumberB } },
-      }),
+    const [slotA, slotB] = await Promise.all([
+      this.findSlot(vinylId, a.kindSlug, a.discNumber),
+      this.findSlot(vinylId, b.kindSlug, b.discNumber),
     ]);
+    const imageA = slotA.image;
+    const imageB = slotB.image;
 
     if (!imageA || imageA.deletedAt) {
       throw new NotFoundException(
-        `No ${a.kindSlug} image (disc ${discNumberA}) stored for vinyl ${vinylId}`,
+        `No ${a.kindSlug} image (disc ${slotA.discNumber}) stored for vinyl ${vinylId}`,
       );
     }
     if (!imageB || imageB.deletedAt) {
       throw new NotFoundException(
-        `No ${b.kindSlug} image (disc ${discNumberB}) stored for vinyl ${vinylId}`,
+        `No ${b.kindSlug} image (disc ${slotB.discNumber}) stored for vinyl ${vinylId}`,
       );
     }
 
@@ -270,21 +264,28 @@ export class UploadsService {
     kindSlug: ImageKindSlug,
     requestedDiscNumber: number,
   ) {
-    const kind = SLUG_TO_KIND[kindSlug];
-    const discNumber = normalizeDiscNumber(kind, requestedDiscNumber);
-    const existing = await this.prisma.vinylImage.findUnique({
-      where: { vinylId_kind_discNumber: { vinylId, kind, discNumber } },
-    });
-    if (!existing || !existing.deletedAt) {
+    const { discNumber, image } = await this.findSlot(vinylId, kindSlug, requestedDiscNumber);
+    if (!image || !image.deletedAt) {
       throw new NotFoundException(
         `No deleted ${kindSlug} image (disc ${discNumber}) for vinyl ${vinylId}`,
       );
     }
 
     return this.prisma.vinylImage.update({
-      where: { vinylId_kind_discNumber: { vinylId, kind, discNumber } },
+      where: { id: image.id },
       data: { deletedAt: null },
     });
+  }
+
+  // Looks up a slot's row (soft-deleted or not — callers decide what counts
+  // as "missing"), normalizing discNumber the same way saveImage() does.
+  private async findSlot(vinylId: number, kindSlug: ImageKindSlug, requestedDiscNumber: number) {
+    const kind = SLUG_TO_KIND[kindSlug];
+    const discNumber = normalizeDiscNumber(kind, requestedDiscNumber);
+    const image = await this.prisma.vinylImage.findUnique({
+      where: { vinylId_kind_discNumber: { vinylId, kind, discNumber } },
+    });
+    return { discNumber, image };
   }
 }
 

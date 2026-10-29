@@ -7,5 +7,8 @@
     "dev": "node scripts/dev.js",
     "dev:backend": "npm run start:dev --prefix backend",
     "dev:frontend": "npm start --prefix frontend"
+  },
+  "engines": {
+    "node": ">=26 <27"
   }
 }
