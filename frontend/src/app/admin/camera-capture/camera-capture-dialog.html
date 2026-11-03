@@ -170,6 +170,18 @@
       }
     </div>
 
+    <!-- Magnifier while dragging a handle; in the DOM throughout so it can be drawn into at once. -->
+    <canvas
+      #loupe
+      aria-hidden="true"
+      class="pointer-events-none absolute top-2 rounded-full border-2 border-white shadow-lg shadow-black/60"
+      [class.hidden]="!loupeAt()"
+      [class.left-2]="loupeAt() === 'left'"
+      [class.right-2]="loupeAt() === 'right'"
+      [style.width.px]="loupeCssPx"
+      [style.height.px]="loupeCssPx"
+    ></canvas>
+
     @if (phase() === 'processing') {
       <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
         <div

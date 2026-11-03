@@ -1,11 +1,13 @@
 // Canvas plumbing for camera capture: turning photos/frames into a capped
 // "working" canvas, downscaled ImageData for detection, and the final
 // upload Files. Geometry lives in camera-capture.logic.ts; perspective
-// warping happens in the OpenCV worker (scan-detector.ts).
+// warping happens in the OpenCV worker (scan-detector.ts). Also draws the
+// magnifier shown while dragging a crop handle.
 
 import {
   Circle,
   DETECT_MAX_EDGE,
+  Point,
   Quad,
   Size,
   WORKING_MAX_EDGE,
@@ -145,4 +147,62 @@ export function cropDiscToPngFile(
     size,
   );
   return canvasToFile(canvas, name, 'png');
+}
+
+/**
+ * Magnifier for the adjust screen: `span` source pixels around `center`
+ * scaled up to fill the (square) loupe canvas, with the crop outline on
+ * top and a crosshair marking exactly where the dragged handle sits.
+ */
+export function drawLoupe(
+  loupe: HTMLCanvasElement,
+  source: HTMLCanvasElement,
+  center: Point,
+  span: number,
+  outline: Quad | Circle,
+): void {
+  const ctx = loupe.getContext('2d');
+  if (!ctx) return;
+  const size = loupe.width;
+  const scale = size / span;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, size, size);
+
+  // Draw in source pixel space; whatever falls outside the photo stays black.
+  ctx.setTransform(scale, 0, 0, scale, size / 2 - center.x * scale, size / 2 - center.y * scale);
+  ctx.drawImage(source, 0, 0);
+  ctx.beginPath();
+  if (Array.isArray(outline)) {
+    outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.closePath();
+  } else {
+    ctx.arc(outline.cx, outline.cy, outline.r, 0, Math.PI * 2);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.strokeStyle = 'rgb(129 140 248)';
+  ctx.lineWidth = size / 80;
+  ctx.stroke();
+
+  // Crosshair with a gap in the middle so the exact spot stays visible.
+  const c = size / 2;
+  const gap = size / 24;
+  const arm = size / 6;
+  ctx.beginPath();
+  for (const [dx, dy] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]) {
+    ctx.moveTo(c + dx * gap, c + dy * gap);
+    ctx.lineTo(c + dx * (gap + arm), c + dy * (gap + arm));
+  }
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgb(0 0 0 / 0.7)';
+  ctx.lineWidth = size / 40;
+  ctx.stroke();
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = size / 100;
+  ctx.stroke();
 }
