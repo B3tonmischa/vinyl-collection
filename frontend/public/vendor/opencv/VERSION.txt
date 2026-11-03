@@ -1,0 +1,5 @@
+opencv.js 4.9.0 — official build from https://docs.opencv.org/4.9.0/opencv.js
+(the newest version the docs site still serves as a single file).
+Self-hosted on purpose rather than installed from npm: it's ~10 MB, only the
+camera-capture worker (scan-worker.js) loads it, and keeping it out of the
+Angular build avoids another build-tool-sensitive dependency.

@@ -1,8 +1,19 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  Input,
+  Output,
+  inject,
+  signal,
+} from '@angular/core';
+import { Dialog } from '@angular/cdk/dialog';
 import { ApiConfigService } from '../../core/services/api-config';
 import { ToastService } from '../../core/services/toast';
 import { UploadsApiService } from '../../core/services/uploads-api';
 import { DISC_IMAGE_KINDS, ImageKind, VinylImage } from '../../models/vinyl.model';
+import { CameraCaptureData, CameraCaptureDialog } from '../camera-capture/camera-capture-dialog';
+import { makeStep, slotKey } from '../camera-capture/scan-session.logic';
 
 interface ImageSlot {
   kind: ImageKind;
@@ -31,6 +42,7 @@ export class ImageUploadPanel {
   private readonly uploadsApi = inject(UploadsApiService);
   protected readonly apiConfig = inject(ApiConfigService);
   private readonly toast = inject(ToastService);
+  private readonly dialog = inject(Dialog);
 
   protected readonly busyKey = signal<string | null>(null);
   private readonly extraDiscs = signal(0);
@@ -86,17 +98,58 @@ export class ImageUploadPanel {
   protected async onFileSelected(slot: ImageSlot, input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     if (!file) return;
+    try {
+      await this.uploadFile(slot, file);
+    } finally {
+      input.value = '';
+    }
+  }
+
+  /** Shared by the file picker and the camera; resolves false on failure. */
+  private async uploadFile(slot: ImageSlot, file: File): Promise<boolean> {
     const key = this.slotKey(slot);
     this.busyKey.set(key);
     try {
       await this.uploadsApi.upload(this.vinylId, slot.kind, slot.discNumber, file);
       this.imagesChanged.emit();
+      return true;
     } catch {
       this.toast.show(`Couldn't upload ${slot.label}.`);
+      return false;
     } finally {
       this.busyKey.set(null);
-      input.value = '';
     }
+  }
+
+  protected takePhoto(slot: ImageSlot): void {
+    this.openCamera({
+      kind: 'single',
+      step: makeStep(slot, this.discCount > 1),
+      onCapture: (step, file) => this.uploadFile(step, file),
+    });
+  }
+
+  /**
+   * Guided session. Its setup screen lets the user pick which photos to
+   * take and how many discs the record has; filled slots start unticked.
+   */
+  protected scanRecord(): void {
+    this.openCamera({
+      kind: 'guided',
+      discCount: this.discCount,
+      filledKeys: this.images.map((img) => slotKey(img)),
+      onCapture: (step, file) => this.uploadFile(step, file),
+    });
+  }
+
+  private openCamera(data: CameraCaptureData): void {
+    this.dialog.open(CameraCaptureDialog, {
+      data,
+      width: '100vw',
+      maxWidth: '100vw',
+      height: '100dvh',
+      ariaLabel: 'Camera',
+    });
   }
 
   protected async deleteImage(slot: ImageSlot): Promise<void> {

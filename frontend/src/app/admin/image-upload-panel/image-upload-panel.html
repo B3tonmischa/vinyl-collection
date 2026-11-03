@@ -5,13 +5,24 @@
         Select two filled slots to swap their images.
       }
     </p>
-    <button
-      type="button"
-      (click)="toggleSwapMode()"
-      class="text-xs text-neutral-500 underline hover:text-neutral-800"
-    >
-      {{ swapMode() ? 'Cancel swap' : 'Swap images' }}
-    </button>
+    <div class="flex items-center gap-4 text-xs">
+      @if (!swapMode()) {
+        <button
+          type="button"
+          (click)="scanRecord()"
+          class="font-semibold text-neutral-700 underline hover:text-neutral-900"
+        >
+          Scan record
+        </button>
+      }
+      <button
+        type="button"
+        (click)="toggleSwapMode()"
+        class="text-neutral-500 underline hover:text-neutral-800"
+      >
+        {{ swapMode() ? 'Cancel swap' : 'Swap images' }}
+      </button>
+    </div>
   </div>
 
   @if (swapSelection().length === 2) {
@@ -67,7 +78,7 @@
           </div>
           <p class="mt-1 truncate text-xs text-neutral-500">{{ slot.label }}</p>
           @if (!swapMode()) {
-            <div class="mt-1 flex gap-2 text-xs">
+            <div class="mt-1 flex flex-wrap gap-x-2 text-xs">
               <label class="cursor-pointer text-neutral-600 underline hover:text-neutral-900">
                 {{ imageFor(slot) ? 'Replace' : 'Upload' }}
                 <input
@@ -78,6 +89,14 @@
                   (change)="onFileSelected(slot, $any($event.target))"
                 />
               </label>
+              <button
+                type="button"
+                [disabled]="isBusy(slot)"
+                (click)="takePhoto(slot)"
+                class="text-neutral-600 underline hover:text-neutral-900"
+              >
+                Photo
+              </button>
               @if (imageFor(slot)) {
                 <button
                   type="button"
@@ -126,7 +145,7 @@
           </div>
           <p class="mt-1 truncate text-xs text-neutral-500">{{ slot.label }}</p>
           @if (!swapMode()) {
-            <div class="mt-1 flex gap-2 text-xs">
+            <div class="mt-1 flex flex-wrap gap-x-2 text-xs">
               <label class="cursor-pointer text-neutral-600 underline hover:text-neutral-900">
                 {{ imageFor(slot) ? 'Replace' : 'Upload' }}
                 <input
@@ -137,6 +156,14 @@
                   (change)="onFileSelected(slot, $any($event.target))"
                 />
               </label>
+              <button
+                type="button"
+                [disabled]="isBusy(slot)"
+                (click)="takePhoto(slot)"
+                class="text-neutral-600 underline hover:text-neutral-900"
+              >
+                Photo
+              </button>
               @if (imageFor(slot)) {
                 <button
                   type="button"
