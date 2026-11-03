@@ -43,17 +43,21 @@ export function slotKey(slot: ScanSlot): string {
   return `${slot.kind}-${slot.discNumber}`;
 }
 
+/** "A" or "B" for a disc-side kind. */
+export function discSide(kind: ImageKind): 'A' | 'B' {
+  return kind === 'DISC_SIDE_A' ? 'A' : 'B';
+}
+
 /**
  * Builds the step for a slot. Disc sides only mention the disc number
  * when the record has more than one disc ("Side A" vs "Disc 2 · Side A").
  */
 export function makeStep(slot: ScanSlot, multiDisc: boolean): ScanStep {
-  const isDisc = DISC_IMAGE_KINDS.includes(slot.kind);
-  if (!isDisc) {
+  if (!DISC_IMAGE_KINDS.includes(slot.kind)) {
     const [label, shortLabel] = PACKAGING_LABELS[slot.kind] ?? [slot.kind, slot.kind];
     return { ...slot, mode: 'sleeve', label, shortLabel };
   }
-  const side = slot.kind === 'DISC_SIDE_A' ? 'A' : 'B';
+  const side = discSide(slot.kind);
   return {
     ...slot,
     mode: 'disc',
@@ -62,15 +66,24 @@ export function makeStep(slot: ScanSlot, multiDisc: boolean): ScanStep {
   };
 }
 
-/** Every slot of a record with `discCount` discs: packaging, then each disc's sides. */
-export function allSteps(discCount: number): ScanStep[] {
+/** The packaging slots of a record (always one of each). */
+export function packagingSteps(): ScanStep[] {
+  return PACKAGING_IMAGE_KINDS.map((kind) => makeStep({ kind, discNumber: 1 }, false));
+}
+
+/** Both sides of every disc of a record with `discCount` discs. */
+export function discSteps(discCount: number): ScanStep[] {
   const multi = discCount > 1;
-  const steps = PACKAGING_IMAGE_KINDS.map((kind) => makeStep({ kind, discNumber: 1 }, multi));
+  const steps: ScanStep[] = [];
   for (let disc = 1; disc <= discCount; disc++) {
-    steps.push(makeStep({ kind: 'DISC_SIDE_A', discNumber: disc }, multi));
-    steps.push(makeStep({ kind: 'DISC_SIDE_B', discNumber: disc }, multi));
+    for (const kind of DISC_IMAGE_KINDS) steps.push(makeStep({ kind, discNumber: disc }, multi));
   }
   return steps;
+}
+
+/** Every slot of a record with `discCount` discs: packaging, then each disc's sides. */
+export function allSteps(discCount: number): ScanStep[] {
+  return [...packagingSteps(), ...discSteps(discCount)];
 }
 
 /**

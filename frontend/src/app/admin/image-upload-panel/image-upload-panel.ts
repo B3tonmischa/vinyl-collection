@@ -11,22 +11,9 @@ import { Dialog } from '@angular/cdk/dialog';
 import { ApiConfigService } from '../../core/services/api-config';
 import { ToastService } from '../../core/services/toast';
 import { UploadsApiService } from '../../core/services/uploads-api';
-import { DISC_IMAGE_KINDS, ImageKind, VinylImage } from '../../models/vinyl.model';
+import { DISC_IMAGE_KINDS, VinylImage } from '../../models/vinyl.model';
 import { CameraCaptureData, CameraCaptureDialog } from '../camera-capture/camera-capture-dialog';
-import { makeStep, slotKey } from '../camera-capture/scan-session.logic';
-
-interface ImageSlot {
-  kind: ImageKind;
-  discNumber: number;
-  label: string;
-}
-
-const PACKAGING_SLOTS: ImageSlot[] = [
-  { kind: 'COVER_FRONT', discNumber: 1, label: 'Cover front' },
-  { kind: 'COVER_BACK', discNumber: 1, label: 'Cover back' },
-  { kind: 'INNER_SLEEVE_A', discNumber: 1, label: 'Inner sleeve A' },
-  { kind: 'INNER_SLEEVE_B', discNumber: 1, label: 'Inner sleeve B' },
-];
+import { ScanStep, discSteps, packagingSteps, slotKey } from '../camera-capture/scan-session.logic';
 
 /** One upload/replace/delete slot per image kind + disc number. */
 @Component({
@@ -48,10 +35,10 @@ export class ImageUploadPanel {
   private readonly extraDiscs = signal(0);
 
   protected readonly swapMode = signal(false);
-  protected readonly swapSelection = signal<ImageSlot[]>([]);
+  protected readonly swapSelection = signal<ScanStep[]>([]);
   protected readonly swapping = signal(false);
 
-  protected readonly packagingSlots = PACKAGING_SLOTS;
+  protected readonly packagingSlots = packagingSteps();
 
   protected get discCount(): number {
     const maxFromImages = this.images.reduce(
@@ -61,41 +48,25 @@ export class ImageUploadPanel {
     return Math.max(maxFromImages, 1 + this.extraDiscs());
   }
 
-  protected get discSlots(): ImageSlot[] {
-    const slots: ImageSlot[] = [];
-    const multi = this.discCount > 1;
-    for (let disc = 1; disc <= this.discCount; disc++) {
-      slots.push({
-        kind: 'DISC_SIDE_A',
-        discNumber: disc,
-        label: multi ? `Disc ${disc} · Side A` : 'Side A',
-      });
-      slots.push({
-        kind: 'DISC_SIDE_B',
-        discNumber: disc,
-        label: multi ? `Disc ${disc} · Side B` : 'Side B',
-      });
-    }
-    return slots;
+  protected get discSlots(): ScanStep[] {
+    return discSteps(this.discCount);
   }
 
   protected addDisc(): void {
     this.extraDiscs.update((n) => n + 1);
   }
 
-  protected imageFor(slot: ImageSlot): VinylImage | undefined {
+  protected imageFor(slot: ScanStep): VinylImage | undefined {
     return this.images.find((img) => img.kind === slot.kind && img.discNumber === slot.discNumber);
   }
 
-  protected slotKey(slot: ImageSlot): string {
-    return `${slot.kind}-${slot.discNumber}`;
+  protected readonly slotKey = slotKey;
+
+  protected isBusy(slot: ScanStep): boolean {
+    return this.busyKey() === slotKey(slot);
   }
 
-  protected isBusy(slot: ImageSlot): boolean {
-    return this.busyKey() === this.slotKey(slot);
-  }
-
-  protected async onFileSelected(slot: ImageSlot, input: HTMLInputElement): Promise<void> {
+  protected async onFileSelected(slot: ScanStep, input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     if (!file) return;
     try {
@@ -106,8 +77,8 @@ export class ImageUploadPanel {
   }
 
   /** Shared by the file picker and the camera; resolves false on failure. */
-  private async uploadFile(slot: ImageSlot, file: File): Promise<boolean> {
-    const key = this.slotKey(slot);
+  private async uploadFile(slot: ScanStep, file: File): Promise<boolean> {
+    const key = slotKey(slot);
     this.busyKey.set(key);
     try {
       await this.uploadsApi.upload(this.vinylId, slot.kind, slot.discNumber, file);
@@ -121,10 +92,10 @@ export class ImageUploadPanel {
     }
   }
 
-  protected takePhoto(slot: ImageSlot): void {
+  protected takePhoto(slot: ScanStep): void {
     this.openCamera({
       kind: 'single',
-      step: makeStep(slot, this.discCount > 1),
+      step: slot,
       onCapture: (step, file) => this.uploadFile(step, file),
     });
   }
@@ -137,7 +108,7 @@ export class ImageUploadPanel {
     this.openCamera({
       kind: 'guided',
       discCount: this.discCount,
-      filledKeys: this.images.map((img) => slotKey(img)),
+      filledKeys: this.images.map(slotKey),
       onCapture: (step, file) => this.uploadFile(step, file),
     });
   }
@@ -152,8 +123,8 @@ export class ImageUploadPanel {
     });
   }
 
-  protected async deleteImage(slot: ImageSlot): Promise<void> {
-    const key = this.slotKey(slot);
+  protected async deleteImage(slot: ScanStep): Promise<void> {
+    const key = slotKey(slot);
     this.busyKey.set(key);
     try {
       await this.uploadsApi.delete(this.vinylId, slot.kind, slot.discNumber);
@@ -176,16 +147,16 @@ export class ImageUploadPanel {
     this.swapSelection.set([]);
   }
 
-  protected isSwapSelected(slot: ImageSlot): boolean {
-    return this.swapSelection().some((s) => this.slotKey(s) === this.slotKey(slot));
+  protected isSwapSelected(slot: ScanStep): boolean {
+    return this.swapSelection().some((s) => slotKey(s) === slotKey(slot));
   }
 
-  protected toggleSwapSelection(slot: ImageSlot): void {
+  protected toggleSwapSelection(slot: ScanStep): void {
     if (!this.swapMode() || !this.imageFor(slot)) return;
-    const key = this.slotKey(slot);
+    const key = slotKey(slot);
     const current = this.swapSelection();
-    if (current.some((s) => this.slotKey(s) === key)) {
-      this.swapSelection.set(current.filter((s) => this.slotKey(s) !== key));
+    if (current.some((s) => slotKey(s) === key)) {
+      this.swapSelection.set(current.filter((s) => slotKey(s) !== key));
       return;
     }
     if (current.length >= 2) return;

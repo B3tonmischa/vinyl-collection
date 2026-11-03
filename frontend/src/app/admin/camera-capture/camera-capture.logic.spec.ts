@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  centroid,
+  circleMaskPath,
+  clamp,
   clampCircle,
   clampPoint,
   discOutputSize,
@@ -14,6 +17,8 @@ import {
   pointInQuad,
   quadArea,
   quadBounds,
+  quadMaskPath,
+  quadPoints,
   Quad,
   scaleCircle,
   scalePoints,
@@ -298,5 +303,33 @@ describe('pickSleeveQuad', () => {
     )!;
     expect(picked[0].x).toBeCloseTo(105);
     expect(picked[0].y).toBeCloseTo(100);
+  });
+});
+
+describe('clamp / centroid', () => {
+  it('clamps into the range', () => {
+    expect(clamp(-1, 0, 10)).toBe(0);
+    expect(clamp(5, 0, 10)).toBe(5);
+    expect(clamp(11, 0, 10)).toBe(10);
+  });
+
+  it('averages the points', () => {
+    expect(centroid(square)).toEqual({ x: 400, y: 400 });
+  });
+});
+
+describe('SVG overlay helpers', () => {
+  it('formats polygon points', () => {
+    expect(quadPoints(square)).toBe('100,100 700,100 700,700 100,700');
+  });
+
+  it('cuts the quad out of the whole frame', () => {
+    expect(quadMaskPath(square, frame)).toBe('M0 0H1000V800H0Z M100 100L700 100L700 700L100 700Z');
+  });
+
+  it('cuts the circle out of the whole frame', () => {
+    expect(circleMaskPath({ cx: 500, cy: 400, r: 100 }, frame)).toBe(
+      'M0 0H1000V800H0Z M400 400a100 100 0 1 0 200 0a100 100 0 1 0 -200 0Z',
+    );
   });
 });

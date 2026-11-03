@@ -27,7 +27,7 @@
         Close
       </button>
     </div>
-    @if (isGuided && phase() !== 'setup') {
+    @if (guided && phase() !== 'setup') {
       <ol class="mt-2 flex gap-1.5 overflow-x-auto pb-1 text-xs" aria-label="Scan steps">
         @for (s of steps(); track slotKey(s); let i = $index) {
           <li class="shrink-0">
@@ -55,60 +55,12 @@
   </header>
 
   <main class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-    @if (phase() === 'setup') {
-      <div class="h-full w-full overflow-y-auto px-4 pb-4 text-sm">
-        <p class="mb-4 text-neutral-400">
-          Choose what to photograph. Slots that already have a photo start unticked — tick them to
-          take a new one.
-        </p>
-        <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Packaging
-        </h3>
-        <ul class="mb-5 space-y-1">
-          @for (item of packagingItems(); track slotKey(item.step)) {
-            <li>
-              <ng-container
-                *ngTemplateOutlet="setupRow; context: { $implicit: item }"
-              ></ng-container>
-            </li>
-          }
-        </ul>
-        <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-neutral-500">Discs</h3>
-          <div class="flex items-center gap-3">
-            <button
-              type="button"
-              (click)="changeDiscs(-1)"
-              [disabled]="discCount() <= 1"
-              class="h-8 w-8 rounded-full bg-neutral-800 text-lg leading-none disabled:opacity-30"
-              aria-label="One disc less"
-            >
-              −
-            </button>
-            <span class="w-14 text-center"
-              >{{ discCount() }} {{ discCount() === 1 ? 'disc' : 'discs' }}</span
-            >
-            <button
-              type="button"
-              (click)="changeDiscs(1)"
-              [disabled]="discCount() >= maxDiscs"
-              class="h-8 w-8 rounded-full bg-neutral-800 text-lg leading-none disabled:opacity-30"
-              aria-label="One disc more"
-            >
-              +
-            </button>
-          </div>
-        </div>
-        <ul class="space-y-1">
-          @for (item of discItems(); track slotKey(item.step)) {
-            <li>
-              <ng-container
-                *ngTemplateOutlet="setupRow; context: { $implicit: item }"
-              ></ng-container>
-            </li>
-          }
-        </ul>
-      </div>
+    @if (phase() === 'setup' && guided) {
+      <app-scan-setup
+        [initialDiscCount]="guided.discCount"
+        [filledKeys]="guided.filledKeys"
+        (start)="startScan($event)"
+      />
     }
 
     @if (phase() === 'finished') {
@@ -136,49 +88,17 @@
         >
           @if (step()?.mode === 'sleeve') {
             @if (guideQuad(); as guide) {
-              <polygon
-                [attr.points]="quadPoints(guide)"
-                fill="none"
-                stroke="white"
-                stroke-opacity="0.6"
-                stroke-width="2"
-                stroke-dasharray="8 6"
-                vector-effect="non-scaling-stroke"
-              />
+              <polygon class="guide" [attr.points]="quadPoints(guide)" />
             }
             @if (liveQuad(); as live) {
-              <polygon
-                [attr.points]="quadPoints(live)"
-                fill="rgb(16 185 129 / 0.15)"
-                stroke="rgb(52 211 153)"
-                stroke-width="3"
-                vector-effect="non-scaling-stroke"
-              />
+              <polygon class="live" [attr.points]="quadPoints(live)" />
             }
           } @else {
             @if (guideDisc(); as guide) {
-              <circle
-                [attr.cx]="guide.cx"
-                [attr.cy]="guide.cy"
-                [attr.r]="guide.r"
-                fill="none"
-                stroke="white"
-                stroke-opacity="0.6"
-                stroke-width="2"
-                stroke-dasharray="8 6"
-                vector-effect="non-scaling-stroke"
-              />
+              <circle class="guide" [attr.cx]="guide.cx" [attr.cy]="guide.cy" [attr.r]="guide.r" />
             }
             @if (liveCircle(); as live) {
-              <circle
-                [attr.cx]="live.cx"
-                [attr.cy]="live.cy"
-                [attr.r]="live.r"
-                fill="rgb(16 185 129 / 0.15)"
-                stroke="rgb(52 211 153)"
-                stroke-width="3"
-                vector-effect="non-scaling-stroke"
-              />
+              <circle class="live" [attr.cx]="live.cx" [attr.cy]="live.cy" [attr.r]="live.r" />
             }
           }
         </svg>
@@ -205,89 +125,44 @@
         >
           @if (step()?.mode === 'sleeve') {
             @if (quad(); as q) {
-              <path
-                [attr.d]="quadMaskPath(q)"
-                fill="black"
-                fill-opacity="0.55"
-                fill-rule="evenodd"
-                pointer-events="none"
-              />
+              <path class="crop-mask" [attr.d]="quadMaskPath(q, stillSize())" />
               <polygon
-                [attr.points]="quadPoints(q)"
+                class="crop-outline"
                 fill="none"
-                stroke="rgb(129 140 248)"
-                stroke-width="2"
-                vector-effect="non-scaling-stroke"
                 pointer-events="none"
+                [attr.points]="quadPoints(q)"
               />
               @for (corner of q; track $index) {
-                <circle
-                  [attr.cx]="corner.x"
-                  [attr.cy]="corner.y"
-                  [attr.r]="handleRadius() * 2.5"
-                  fill="transparent"
-                  class="cursor-grab"
-                  (pointerdown)="startDrag($index, $event)"
-                />
-                <circle
-                  [attr.cx]="corner.x"
-                  [attr.cy]="corner.y"
-                  [attr.r]="handleRadius()"
-                  fill="white"
-                  stroke="rgb(99 102 241)"
-                  stroke-width="3"
-                  vector-effect="non-scaling-stroke"
-                  pointer-events="none"
+                <ng-container
+                  *ngTemplateOutlet="
+                    handle;
+                    context: {
+                      x: corner.x,
+                      y: corner.y,
+                      drag: { corner: $index },
+                      cursor: 'cursor-grab',
+                    }
+                  "
                 />
               }
             }
           } @else {
             @if (circle(); as c) {
-              <path
-                [attr.d]="circleMaskPath(c)"
-                fill="black"
-                fill-opacity="0.55"
-                fill-rule="evenodd"
-                pointer-events="none"
-              />
+              <path class="crop-mask" [attr.d]="circleMaskPath(c, stillSize())" />
               <circle
+                class="crop-outline cursor-move"
+                fill="transparent"
                 [attr.cx]="c.cx"
                 [attr.cy]="c.cy"
                 [attr.r]="c.r"
-                fill="transparent"
-                stroke="rgb(129 140 248)"
-                stroke-width="2"
-                vector-effect="non-scaling-stroke"
-                class="cursor-move"
                 (pointerdown)="startDrag('center', $event)"
               />
-              <circle
-                [attr.cx]="c.cx"
-                [attr.cy]="c.cy"
-                [attr.r]="handleRadius()"
-                fill="white"
-                stroke="rgb(99 102 241)"
-                stroke-width="3"
-                vector-effect="non-scaling-stroke"
-                pointer-events="none"
-              />
-              <circle
-                [attr.cx]="c.cx + c.r"
-                [attr.cy]="c.cy"
-                [attr.r]="handleRadius() * 2.5"
-                fill="transparent"
-                class="cursor-ew-resize"
-                (pointerdown)="startDrag('radius', $event)"
-              />
-              <circle
-                [attr.cx]="c.cx + c.r"
-                [attr.cy]="c.cy"
-                [attr.r]="handleRadius()"
-                fill="white"
-                stroke="rgb(99 102 241)"
-                stroke-width="3"
-                vector-effect="non-scaling-stroke"
-                pointer-events="none"
+              <ng-container *ngTemplateOutlet="handleDot; context: { x: c.cx, y: c.cy }" />
+              <ng-container
+                *ngTemplateOutlet="
+                  handle;
+                  context: { x: c.cx + c.r, y: c.cy, drag: 'radius', cursor: 'cursor-ew-resize' }
+                "
               />
             }
           }
@@ -305,123 +180,111 @@
     }
   </main>
 
-  <footer class="px-4 pb-6 pt-3 text-sm">
-    @switch (phase()) {
-      @case ('setup') {
-        <button
-          type="button"
-          (click)="startScan()"
-          [disabled]="selectedCount() === 0"
-          class="w-full rounded bg-white py-3 font-medium text-neutral-900 hover:bg-neutral-200 disabled:opacity-40"
-        >
-          Start — {{ selectedCount() }} {{ selectedCount() === 1 ? 'photo' : 'photos' }}
-        </button>
-      }
-      @case ('viewfinder') {
-        <div class="grid grid-cols-3 items-center">
-          <label
-            class="cursor-pointer justify-self-start text-neutral-300 underline hover:text-white"
-          >
-            Pick from gallery
-            <input
-              type="file"
-              accept="image/*"
-              class="hidden"
-              (change)="onGalleryFile($any($event.target))"
-            />
-          </label>
-          <button
-            type="button"
-            (click)="shutter()"
-            [disabled]="!videoSize() || !!cameraError()"
-            class="h-16 w-16 justify-self-center rounded-full border-4 border-white bg-white/20 hover:bg-white/40 disabled:opacity-30"
-          >
-            <span class="sr-only">Take photo</span>
-          </button>
-          @if (isGuided) {
+  @if (phase() !== 'setup') {
+    <footer class="px-4 pb-6 pt-3 text-sm">
+      @switch (phase()) {
+        @case ('viewfinder') {
+          <div class="grid grid-cols-3 items-center">
+            <label
+              class="cursor-pointer justify-self-start text-neutral-300 underline hover:text-white"
+            >
+              Pick from gallery
+              <input
+                type="file"
+                accept="image/*"
+                class="hidden"
+                (change)="onGalleryFile($any($event.target))"
+              />
+            </label>
             <button
               type="button"
-              (click)="skip()"
-              class="justify-self-end text-neutral-300 underline hover:text-white"
+              (click)="shutter()"
+              [disabled]="!videoSize() || !!cameraError()"
+              class="h-16 w-16 justify-self-center rounded-full border-4 border-white bg-white/20 hover:bg-white/40 disabled:opacity-30"
             >
-              Skip
+              <span class="sr-only">Take photo</span>
             </button>
-          }
-        </div>
-      }
-      @case ('adjust') {
-        <p class="mb-3 text-center text-xs text-neutral-400">
-          @if (step()?.mode === 'sleeve') {
-            {{
-              autoDetected()
-                ? 'Edges detected — drag the corners to fine-tune.'
-                : "Couldn't find the edges — drag the corners onto the sleeve's corners."
-            }}
-          } @else {
-            {{
-              autoDetected()
-                ? 'Record detected — drag the middle to move, the edge handle to resize.'
-                : 'Drag the middle onto the spindle hole and the edge handle to the rim.'
-            }}
-          }
-        </p>
-        @if (uploadFailed()) {
-          <p class="mb-3 text-center text-xs text-red-400">Upload failed — try again.</p>
+            <div class="justify-self-end">
+              <ng-container *ngTemplateOutlet="skipButton" />
+            </div>
+          </div>
         }
-        <div class="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            (click)="retake()"
-            class="text-neutral-300 underline hover:text-white"
-          >
-            Retake
-          </button>
-          <div class="flex items-center gap-4">
-            @if (isGuided) {
+        @case ('adjust') {
+          <p class="mb-3 text-center text-xs text-neutral-400">
+            @if (step()?.mode === 'sleeve') {
+              {{
+                autoDetected()
+                  ? 'Edges detected — drag the corners to fine-tune.'
+                  : "Couldn't find the edges — drag the corners onto the sleeve's corners."
+              }}
+            } @else {
+              {{
+                autoDetected()
+                  ? 'Record detected — drag the middle to move, the edge handle to resize.'
+                  : 'Drag the middle onto the spindle hole and the edge handle to the rim.'
+              }}
+            }
+          </p>
+          @if (saveFailed()) {
+            <p class="mb-3 text-center text-xs text-red-400">Saving failed — try again.</p>
+          }
+          <div class="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              (click)="showViewfinder()"
+              class="text-neutral-300 underline hover:text-white"
+            >
+              Retake
+            </button>
+            <div class="flex items-center gap-4">
+              <ng-container *ngTemplateOutlet="skipButton" />
               <button
                 type="button"
-                (click)="skip()"
-                class="text-neutral-300 underline hover:text-white"
+                (click)="usePhoto()"
+                class="rounded bg-white px-4 py-2 font-medium text-neutral-900 hover:bg-neutral-200"
               >
-                Skip
+                Use photo
               </button>
-            }
+            </div>
+          </div>
+        }
+        @case ('finished') {
+          <div class="flex items-center justify-end gap-4">
             <button
               type="button"
-              (click)="usePhoto()"
+              (click)="close()"
               class="rounded bg-white px-4 py-2 font-medium text-neutral-900 hover:bg-neutral-200"
             >
-              Use photo
+              Done
             </button>
           </div>
-        </div>
+        }
       }
-      @case ('finished') {
-        <div class="flex items-center justify-end gap-4">
-          <button
-            type="button"
-            (click)="close()"
-            class="rounded bg-white px-4 py-2 font-medium text-neutral-900 hover:bg-neutral-200"
-          >
-            Done
-          </button>
-        </div>
-      }
-    }
-  </footer>
+    </footer>
+  }
 </div>
 
-<ng-template #setupRow let-item>
-  <label class="flex cursor-pointer items-center gap-3 rounded bg-neutral-900 px-3 py-2.5">
-    <input
-      type="checkbox"
-      class="h-5 w-5 accent-white"
-      [checked]="item.selected"
-      (change)="toggleItem(item)"
-    />
-    <span class="flex-1">{{ item.step.label }}</span>
-    @if (item.filled) {
-      <span class="text-xs text-emerald-400">has photo</span>
-    }
-  </label>
+<ng-template #skipButton>
+  @if (guided) {
+    <button type="button" (click)="skip()" class="text-neutral-300 underline hover:text-white">
+      Skip
+    </button>
+  }
+</ng-template>
+
+<!-- A crop handle: a big invisible touch target around a small visible dot. -->
+<ng-template #handle let-x="x" let-y="y" let-drag="drag" let-cursor="cursor">
+  <svg:circle
+    fill="transparent"
+    [attr.class]="cursor"
+    [attr.cx]="x"
+    [attr.cy]="y"
+    [attr.r]="handleRadius() * 2.5"
+    (pointerdown)="startDrag(drag, $event)"
+  />
+  <ng-container *ngTemplateOutlet="handleDot; context: { x: x, y: y }" />
+</ng-template>
+
+<ng-template #handleDot let-x="x" let-y="y">
+  <svg:circle class="handle-dot" [attr.cx]="x" [attr.cy]="y" [attr.r]="handleRadius()" />
 </ng-template>

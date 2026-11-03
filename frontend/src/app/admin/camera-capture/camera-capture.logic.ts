@@ -32,6 +32,17 @@ export const LIVE_DETECT_MAX_EDGE = 560;
 /** Matches the backend's FULL_MAX_DIMENSION — anything bigger is thrown away. */
 export const OUTPUT_MAX_EDGE = 2000;
 
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+export function centroid(points: Point[]): Point {
+  return {
+    x: points.reduce((sum, p) => sum + p.x, 0) / points.length,
+    y: points.reduce((sum, p) => sum + p.y, 0) / points.length,
+  };
+}
+
 /**
  * Orders four arbitrary corners as TL, TR, BR, BL: sorted clockwise by
  * angle around their centroid (y points down, so ascending atan2 is
@@ -41,10 +52,9 @@ export const OUTPUT_MAX_EDGE = 2000;
  */
 export function orderCorners(points: Point[]): Quad {
   if (points.length !== 4) throw new Error(`Expected 4 corners, got ${points.length}`);
-  const cx = points.reduce((s, p) => s + p.x, 0) / 4;
-  const cy = points.reduce((s, p) => s + p.y, 0) / 4;
+  const c = centroid(points);
   const clockwise = [...points].sort(
-    (a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx),
+    (a, b) => Math.atan2(a.y - c.y, a.x - c.x) - Math.atan2(b.y - c.y, b.x - c.x),
   );
   let start = 0;
   for (let i = 1; i < 4; i++) {
@@ -113,6 +123,15 @@ function cornerAngles(quad: Quad): number[] {
   });
 }
 
+// What a sleeve shot on purpose can look like (see isPlausibleSleeveQuad).
+const SLEEVE_MIN_AREA_FRACTION = 0.08;
+const SLEEVE_MAX_AREA_FRACTION = 0.95;
+const SLEEVE_MAX_SIDE_RATIO = 1.6;
+const SLEEVE_MIN_CORNER_DEG = 55;
+const SLEEVE_MAX_CORNER_DEG = 125;
+/** Share of the longer image edge that counts as "on the border". */
+const BORDER_MARGIN_FRACTION = 0.012;
+
 /**
  * Rejects detections that can't be a sleeve shot on purpose: too small a
  * share of the frame (a label or a sticker), basically the whole frame
@@ -122,13 +141,16 @@ function cornerAngles(quad: Quad): number[] {
  */
 export function isPlausibleSleeveQuad(quad: Quad, frame: Size): boolean {
   const areaFraction = quadArea(quad) / (frame.width * frame.height);
-  if (areaFraction < 0.08 || areaFraction > 0.95) return false;
+  if (areaFraction < SLEEVE_MIN_AREA_FRACTION || areaFraction > SLEEVE_MAX_AREA_FRACTION) {
+    return false;
+  }
   const s = sides(quad);
-  if (Math.max(...s) / Math.min(...s) > 1.6) return false;
-  if (cornerAngles(quad).some((a) => a < 55 || a > 125)) return false;
+  if (Math.max(...s) / Math.min(...s) > SLEEVE_MAX_SIDE_RATIO) return false;
+  const badCorner = (deg: number) => deg < SLEEVE_MIN_CORNER_DEG || deg > SLEEVE_MAX_CORNER_DEG;
+  if (cornerAngles(quad).some(badCorner)) return false;
   // A whole side on the image border: the photo's own edge (or floorboards
   // / a table edge running off it), not a sleeve lying in view.
-  const m = Math.max(frame.width, frame.height) * 0.012;
+  const m = Math.max(frame.width, frame.height) * BORDER_MARGIN_FRACTION;
   const nearLeft = (p: Point) => p.x < m;
   const nearTop = (p: Point) => p.y < m;
   const nearRight = (p: Point) => p.x > frame.width - m;
@@ -141,9 +163,11 @@ export function isPlausibleSleeveQuad(quad: Quad, frame: Size): boolean {
 
 /** Scales a quad about its centroid (1.03 = 3% bigger). */
 export function expandQuad(quad: Quad, factor: number): Quad {
-  const cx = quad.reduce((sum, p) => sum + p.x, 0) / 4;
-  const cy = quad.reduce((sum, p) => sum + p.y, 0) / 4;
-  return quad.map((p) => ({ x: cx + (p.x - cx) * factor, y: cy + (p.y - cy) * factor })) as Quad;
+  const c = centroid(quad);
+  return quad.map((p) => ({
+    x: c.x + (p.x - c.x) * factor,
+    y: c.y + (p.y - c.y) * factor,
+  })) as Quad;
 }
 
 /** True when p lies inside a convex, ordered quad (or on its edge). */
@@ -168,6 +192,31 @@ export interface QuadCandidate {
   support: number;
 }
 
+/** A detector candidate once its corners are ordered. */
+interface SleeveCandidate {
+  quad: Quad;
+  support: number;
+}
+
+/** Corners closer than this share of the frame diagonal count as the same outline. */
+const AGREE_TOLERANCE_FRACTION = 0.03;
+/** Score boost per agreeing candidate, capped at MAX_AGREEING_PEERS. */
+const AGREEMENT_BONUS = 0.25;
+const MAX_AGREEING_PEERS = 4;
+// An enclosing outline replaces the winner (see enclosingSleeve) only if
+// it is well supported, somewhat but not much bigger, and differs on
+// every side.
+const ENCLOSING_MIN_SUPPORT = 0.55;
+const ENCLOSING_MIN_AREA_RATIO = 1.05;
+const ENCLOSING_MAX_AREA_RATIO = 1.7;
+const ENCLOSING_SLACK = 1.03;
+const ENCLOSING_MIN_SIDE_GAP = 1 / 3; // of the agree tolerance
+
+/** Edge support dominates both the score and the corner average. */
+function supportWeight(support: number): number {
+  return support ** 3;
+}
+
 /**
  * Chooses the sleeve among the detector's candidates (contours from
  * several edge/region maps plus straight-line combinations). Edge support
@@ -178,74 +227,94 @@ export interface QuadCandidate {
  * agreeing candidates, which also steadies the live outline.
  */
 export function pickSleeveQuad(candidates: QuadCandidate[], frame: Size): Quad | null {
-  const quads = candidates
+  const plausible: SleeveCandidate[] = candidates
     .filter((c) => c.corners.length === 4)
     .map((c) => ({ quad: orderCorners(c.corners), support: c.support }))
     .filter((c) => isPlausibleSleeveQuad(c.quad, frame));
-  if (quads.length === 0) return null;
+  if (plausible.length === 0) return null;
 
+  const tolerance = Math.hypot(frame.width, frame.height) * AGREE_TOLERANCE_FRACTION;
+  const clusterOf = (quad: Quad) =>
+    plausible.filter((c) => quad.every((p, i) => distance(p, c.quad[i]) < tolerance));
+
+  const winner = bestScoring(plausible, frame, clusterOf);
+  const sleeve = enclosingSleeve(winner, plausible, tolerance) ?? winner;
+  return weightedMean(clusterOf(sleeve));
+}
+
+function bestScoring(
+  candidates: SleeveCandidate[],
+  frame: Size,
+  clusterOf: (quad: Quad) => SleeveCandidate[],
+): Quad {
   const diag = Math.hypot(frame.width, frame.height);
-  const tolerance = diag * 0.03;
-  const agrees = (a: Quad, b: Quad) => a.every((p, i) => distance(p, b[i]) < tolerance);
-  const centre = { x: frame.width / 2, y: frame.height / 2 };
-
-  let best: { score: number; quad: Quad; cluster: typeof quads } | null = null;
-  for (const { quad: q, support } of quads) {
-    const cluster = quads.filter((other) => agrees(q, other.quad));
-    const s = sides(q);
+  const center = { x: frame.width / 2, y: frame.height / 2 };
+  const score = ({ quad, support }: SleeveCandidate) => {
+    const s = sides(quad);
     const squareness = Math.min(...s) / Math.max(...s);
-    const centroid = {
-      x: q.reduce((sum, p) => sum + p.x, 0) / 4,
-      y: q.reduce((sum, p) => sum + p.y, 0) / 4,
-    };
-    const centrality = 1 - distance(centroid, centre) / diag;
-    const areaFraction = quadArea(q) / (frame.width * frame.height);
-    const agreement = 1 + 0.25 * Math.min(cluster.length - 1, 4);
-    const score = support ** 3 * agreement * areaFraction * squareness * centrality;
-    if (!best || score > best.score) best = { score, quad: q, cluster };
+    const centrality = 1 - distance(centroid(quad), center) / diag;
+    const areaFraction = quadArea(quad) / (frame.width * frame.height);
+    const peers = Math.min(clusterOf(quad).length - 1, MAX_AGREEING_PEERS);
+    const agreement = 1 + AGREEMENT_BONUS * peers;
+    return supportWeight(support) * agreement * areaFraction * squareness * centrality;
+  };
+  let best = candidates[0];
+  let bestScore = -Infinity;
+  for (const candidate of candidates) {
+    const candidateScore = score(candidate);
+    if (candidateScore > bestScore) {
+      best = candidate;
+      bestScore = candidateScore;
+    }
   }
-  // Many covers print a frame or border inside the sleeve, which has a
-  // perfect edge and would win above. If a well-supported candidate
-  // surrounds the winner on all four sides (give or take a few pixels)
-  // and isn't much bigger, that's the real sleeve. All four matters: an
-  // outline sharing three sides with the winner and pushing the fourth
-  // out to a grain line or table edge is the sleeve plus clutter.
-  const winner = best!.quad;
-  const winnerArea = quadArea(winner);
-  const enclosing = quads
-    .filter(
-      (c) =>
-        c.support >= 0.55 &&
-        quadArea(c.quad) > winnerArea * 1.05 &&
-        quadArea(c.quad) < winnerArea * 1.7 &&
-        winner.every((p) => pointInQuad(p, expandQuad(c.quad, 1.03))) &&
-        sideMidpoints(c.quad).every(
-          (m, i) => distance(m, sideMidpoints(winner)[i]) > tolerance / 3,
-        ),
-    )
-    .sort((a, b) => b.support - a.support || quadArea(b.quad) - quadArea(a.quad))[0];
-  if (enclosing) {
-    best = {
-      score: 0,
-      quad: enclosing.quad,
-      cluster: quads.filter((o) => agrees(enclosing.quad, o.quad)),
-    };
-  }
+  return best.quad;
+}
 
-  // Support-weighted, so a sloppy near-duplicate barely shifts the corners.
-  const cluster = best!.cluster;
-  const weight = (c: (typeof quads)[number]) => c.support ** 3;
-  const total = cluster.reduce((sum, c) => sum + weight(c), 0);
-  return [0, 1, 2, 3].map((i) => ({
-    x: cluster.reduce((sum, c) => sum + c.quad[i].x * weight(c), 0) / total,
-    y: cluster.reduce((sum, c) => sum + c.quad[i].y * weight(c), 0) / total,
-  })) as Quad;
+/**
+ * Many covers print a frame or border inside the sleeve, which has a
+ * perfect edge and wins on score. If a well-supported candidate surrounds
+ * the winner on all four sides (give or take a few pixels) and isn't much
+ * bigger, that's the real sleeve. All four matters: an outline sharing
+ * three sides with the winner and pushing the fourth out to a grain line
+ * or table edge is the sleeve plus clutter.
+ */
+function enclosingSleeve(
+  winner: Quad,
+  candidates: SleeveCandidate[],
+  tolerance: number,
+): Quad | null {
+  const winnerArea = quadArea(winner);
+  const winnerMids = sideMidpoints(winner);
+  const encloses = ({ quad, support }: SleeveCandidate) => {
+    const area = quadArea(quad);
+    const slack = expandQuad(quad, ENCLOSING_SLACK);
+    return (
+      support >= ENCLOSING_MIN_SUPPORT &&
+      area > winnerArea * ENCLOSING_MIN_AREA_RATIO &&
+      area < winnerArea * ENCLOSING_MAX_AREA_RATIO &&
+      winner.every((p) => pointInQuad(p, slack)) &&
+      sideMidpoints(quad).every(
+        (m, i) => distance(m, winnerMids[i]) > tolerance * ENCLOSING_MIN_SIDE_GAP,
+      )
+    );
+  };
+  const [best] = candidates
+    .filter(encloses)
+    .sort((a, b) => b.support - a.support || quadArea(b.quad) - quadArea(a.quad));
+  return best?.quad ?? null;
+}
+
+/** Support-weighted corner mean, so a sloppy near-duplicate barely shifts the corners. */
+function weightedMean(cluster: SleeveCandidate[]): Quad {
+  const total = cluster.reduce((sum, c) => sum + supportWeight(c.support), 0);
+  const mean = (i: number, axis: 'x' | 'y') =>
+    cluster.reduce((sum, c) => sum + c.quad[i][axis] * supportWeight(c.support), 0) / total;
+  return [0, 1, 2, 3].map((i) => ({ x: mean(i, 'x'), y: mean(i, 'y') })) as Quad;
 }
 
 /** Edge length of the square a sleeve quad gets warped to. */
 export function squareOutputSize(quad: Quad, maxEdge = OUTPUT_MAX_EDGE): number {
-  const sides = quad.map((p, i) => distance(p, quad[(i + 1) % 4]));
-  const mean = sides.reduce((a, b) => a + b, 0) / 4;
+  const mean = sides(quad).reduce((a, b) => a + b, 0) / 4;
   return Math.max(1, Math.round(Math.min(maxEdge, mean)));
 }
 
@@ -272,19 +341,16 @@ export function guideCircle(frame: Size, fraction = 0.42): Circle {
 }
 
 export function clampPoint(p: Point, frame: Size): Point {
-  return {
-    x: Math.min(Math.max(p.x, 0), frame.width),
-    y: Math.min(Math.max(p.y, 0), frame.height),
-  };
+  return { x: clamp(p.x, 0, frame.width), y: clamp(p.y, 0, frame.height) };
 }
 
 /** Keeps a disc circle fully inside the frame and at a usable minimum size. */
 export function clampCircle(circle: Circle, frame: Size, minRadius = 20): Circle {
   const maxRadius = Math.min(frame.width, frame.height) / 2;
-  const r = Math.min(Math.max(circle.r, Math.min(minRadius, maxRadius)), maxRadius);
+  const r = clamp(circle.r, Math.min(minRadius, maxRadius), maxRadius);
   return {
-    cx: Math.min(Math.max(circle.cx, r), frame.width - r),
-    cy: Math.min(Math.max(circle.cy, r), frame.height - r),
+    cx: clamp(circle.cx, r, frame.width - r),
+    cy: clamp(circle.cy, r, frame.height - r),
     r,
   };
 }
@@ -294,11 +360,10 @@ export function discOutputSize(circle: Circle, maxEdge = OUTPUT_MAX_EDGE): numbe
   return Math.max(1, Math.round(Math.min(maxEdge, circle.r * 2)));
 }
 
+export interface Rect extends Point, Size {}
+
 /** Axis-aligned bounds of a quad, used when OpenCV isn't available to warp. */
-export function quadBounds(
-  quad: Quad,
-  frame: Size,
-): { x: number; y: number; width: number; height: number } {
+export function quadBounds(quad: Quad, frame: Size): Rect {
   const xs = quad.map((p) => p.x);
   const ys = quad.map((p) => p.y);
   const x = Math.max(0, Math.min(...xs));
@@ -309,4 +374,28 @@ export function quadBounds(
     width: Math.min(frame.width, Math.max(...xs)) - x,
     height: Math.min(frame.height, Math.max(...ys)) - y,
   };
+}
+
+// SVG helpers for the crop overlays.
+
+/** `points` attribute of an SVG polygon. */
+export function quadPoints(quad: Quad): string {
+  return quad.map((p) => `${p.x},${p.y}`).join(' ');
+}
+
+/** Whole frame minus the quad (evenodd), to dim what gets cut away. */
+export function quadMaskPath(quad: Quad, frame: Size): string {
+  const [a, b, c, d] = quad;
+  return (
+    `M0 0H${frame.width}V${frame.height}H0Z ` +
+    `M${a.x} ${a.y}L${b.x} ${b.y}L${c.x} ${c.y}L${d.x} ${d.y}Z`
+  );
+}
+
+/** Whole frame minus the circle (evenodd). */
+export function circleMaskPath(c: Circle, frame: Size): string {
+  return (
+    `M0 0H${frame.width}V${frame.height}H0Z M${c.cx - c.r} ${c.cy}` +
+    `a${c.r} ${c.r} 0 1 0 ${c.r * 2} 0a${c.r} ${c.r} 0 1 0 ${-c.r * 2} 0Z`
+  );
 }

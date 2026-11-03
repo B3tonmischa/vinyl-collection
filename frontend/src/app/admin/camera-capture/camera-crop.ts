@@ -70,30 +70,51 @@ export function fullImageData(canvas: HTMLCanvasElement): ImageData {
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
 
-function toBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
+const FILE_TYPES = {
+  jpeg: { mime: 'image/jpeg', extension: 'jpg', quality: 0.92 },
+  png: { mime: 'image/png', extension: 'png', quality: undefined },
+} as const;
+
+/** Encodes a canvas as an upload File named `<name>.<extension>`. */
+function canvasToFile(
+  canvas: HTMLCanvasElement,
+  name: string,
+  format: keyof typeof FILE_TYPES,
+): Promise<File> {
+  const { mime, extension, quality } = FILE_TYPES[format];
   return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Encoding failed'))), type, quality),
+    canvas.toBlob(
+      (blob) =>
+        blob
+          ? resolve(new File([blob], `${name}.${extension}`, { type: mime }))
+          : reject(new Error('Encoding failed')),
+      mime,
+      quality,
+    ),
   );
 }
 
 /** Sleeve output: JPEG (no alpha needed, much smaller than PNG). */
-export async function imageDataToJpegFile(image: ImageData, name: string): Promise<File> {
+export function imageDataToJpegFile(image: ImageData, name: string): Promise<File> {
   const [canvas, ctx] = newCanvas(image);
   ctx.putImageData(image, 0, 0);
-  const blob = await toBlob(canvas, 'image/jpeg', 0.92);
-  return new File([blob], `${name}.jpg`, { type: 'image/jpeg' });
+  return canvasToFile(canvas, name, 'jpeg');
 }
 
 /**
  * Fallback when OpenCV couldn't load: crop the quad's bounding box and
  * squash it to a square. No perspective correction, but still usable.
  */
-export function cropSleeveWithoutWarp(working: HTMLCanvasElement, quad: Quad): Promise<File> {
+export function cropSleeveWithoutWarp(
+  working: HTMLCanvasElement,
+  quad: Quad,
+  name: string,
+): Promise<File> {
   const b = quadBounds(quad, canvasSize(working));
   const size = squareOutputSize(quad);
   const [canvas, ctx] = newCanvas({ width: size, height: size });
   ctx.drawImage(working, b.x, b.y, b.width, b.height, 0, 0, size, size);
-  return imageDataToJpegFile(ctx.getImageData(0, 0, size, size), 'sleeve');
+  return canvasToFile(canvas, name, 'jpeg');
 }
 
 /**
@@ -101,7 +122,11 @@ export function cropSleeveWithoutWarp(working: HTMLCanvasElement, quad: Quad): P
  * WebP because iOS Safari's canvas WebP encoding isn't dependable; the
  * backend re-encodes to WebP and sharp keeps the alpha channel.
  */
-export async function cropDiscToPngFile(working: HTMLCanvasElement, circle: Circle): Promise<File> {
+export function cropDiscToPngFile(
+  working: HTMLCanvasElement,
+  circle: Circle,
+  name: string,
+): Promise<File> {
   const size = discOutputSize(circle);
   const [canvas, ctx] = newCanvas({ width: size, height: size });
   ctx.beginPath();
@@ -119,6 +144,5 @@ export async function cropDiscToPngFile(working: HTMLCanvasElement, circle: Circ
     size,
     size,
   );
-  const blob = await toBlob(canvas, 'image/png');
-  return new File([blob], 'disc.png', { type: 'image/png' });
+  return canvasToFile(canvas, name, 'png');
 }

@@ -1,8 +1,9 @@
 /*
  * Classic (non-module) web worker for camera-capture auto-crop. Lives in
  * public/ rather than src/ because it has to `importScripts` the
- * self-hosted opencv.js next to it — module workers can't do that, and
- * keeping it out of the Angular build avoids wiring a worker tsconfig.
+ * self-hosted public/vendor/opencv/opencv.js — module workers can't do
+ * that, and keeping it out of the Angular build avoids wiring a worker
+ * tsconfig.
  * Wrapped by src/app/admin/camera-capture/scan-detector.ts.
  *
  * Protocol: every request is { id, type, ... } and gets exactly one
@@ -21,7 +22,7 @@ function loadOpenCv() {
   if (!ready) {
     ready = new Promise((resolve, reject) => {
       try {
-        importScripts('opencv.js');
+        importScripts('../vendor/opencv/opencv.js');
       } catch (err) {
         reject(err);
         return;
@@ -33,6 +34,28 @@ function loadOpenCv() {
     });
   }
   return ready;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+/** Shoelace area of a polygon, either winding. */
+function polygonArea(pts) {
+  let sum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const q = pts[(i + 1) % pts.length];
+    sum += p.x * q.y - q.x * p.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+/** Clockwise around the centroid; the TS twin is orderCorners() in camera-capture.logic.ts. */
+function orderClockwise(pts) {
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  return [...pts].sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
 }
 
 function withMats(fn) {
@@ -54,14 +77,18 @@ function withMats(fn) {
  * Sleeve detection. A single Canny pass breaks on real photos: wood grain
  * or busy cover art merge the outline into clutter, a white sleeve on a
  * light table barely has an edge, and some sleeves differ from the table
- * only in colour. So several edge/region maps are built, every large
+ * only in color. So several edge/region maps are built, every large
  * contour on each is turned into a 4-corner candidate, and the main
  * thread picks the best one (pickSleeveQuad in camera-capture.logic.ts),
- * favouring candidates that several maps agree on.
+ * favoring candidates that several maps agree on.
  */
 
 const MAX_CONTOURS_PER_MAP = 12;
 const MIN_AREA_FRACTION = 0.06;
+/** Most candidates handed back to the main thread. */
+const MAX_CANDIDATES = 40;
+/** Candidates whose weakest side has less edge support are dropped. */
+const MIN_SUPPORT = 0.25;
 
 /** Binary maps whose contours may outline the sleeve. */
 function buildMaps(src, track) {
@@ -92,21 +119,21 @@ function buildMaps(src, track) {
   cv.morphologyEx(soft, soft, cv.MORPH_CLOSE, close, anchor, 2);
   maps.push(soft);
 
-  // 3. Colour edges: Canny per RGB channel, OR-ed — catches a red sleeve
+  // 3. Color edges: Canny per RGB channel, OR-ed — catches a red sleeve
   //    on a grey table of the same brightness.
   const channels = track(new cv.MatVector());
   cv.split(src, channels);
-  const colour = track(cv.Mat.zeros(src.rows, src.cols, cv.CV_8U));
+  const color = track(cv.Mat.zeros(src.rows, src.cols, cv.CV_8U));
   for (let i = 0; i < 3; i++) {
     const ch = track(channels.get(i));
     cv.GaussianBlur(ch, ch, new cv.Size(5, 5), 0);
     const e = track(new cv.Mat());
     cv.Canny(ch, e, 40, 120);
-    cv.bitwise_or(colour, e, colour);
+    cv.bitwise_or(color, e, color);
   }
-  cv.bitwise_or(lineEdges, colour, lineEdges);
-  cv.morphologyEx(colour, colour, cv.MORPH_CLOSE, close, anchor, 2);
-  maps.push(colour);
+  cv.bitwise_or(lineEdges, color, lineEdges);
+  cv.morphologyEx(color, color, cv.MORPH_CLOSE, close, anchor, 2);
+  maps.push(color);
 
   // 4. Otsu regions, both polarities: a light sleeve on a dark table (or
   //    vice versa) is one big blob even when its edge is blurry or shadowed.
@@ -201,7 +228,8 @@ function densify(pts, step) {
     const a = pts[i];
     const b = pts[(i + 1) % pts.length];
     const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
-    for (let k = 0; k < n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+    for (let k = 0; k < n; k++)
+      out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
   }
   return out;
 }
@@ -231,12 +259,6 @@ function quadsFromContour(c, track) {
     }
   }
   return quads;
-}
-
-function orderClockwise(pts) {
-  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-  return [...pts].sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
 }
 
 /**
@@ -275,14 +297,14 @@ function edgeThreshold(channels) {
   }
   mags.sort((a, b) => a - b);
   const median = mags[Math.floor(mags.length / 2)] || 0;
-  return Math.min(60, Math.max(18, median * 3));
+  return clamp(median * 3, 18, 60);
 }
 
 /**
  * Edge evidence along the stretch t0…t1 of side a→b (0 = a, 1 = b;
  * outside 0–1 is the side's extension past its corners): `hits`, the
  * share that runs along an edge across it, and `strength`, the mean edge
- * response there. An edge counts in any colour channel, within ±2 px. Only the
+ * response there. An edge counts in any color channel, within ±2 px. Only the
  * gradient component normal to the side counts, so grain lines crossing
  * a side don't. The ends are skipped: corners are often rounded, worn or
  * occluded.
@@ -317,6 +339,18 @@ function sideEdge(a, b, grad, t0, t1) {
 }
 
 /**
+ * How much the edge past a corner looks like the *same* edge carrying on:
+ * its hits, counted only when it's about as strong as the side itself. A
+ * sleeve edge lying along a fainter grain line doesn't continue; a grain
+ * line, or a sleeve edge running past a fake corner, does.
+ */
+function continuation(side, extension) {
+  if (side.strength <= 0) return 0;
+  const ratio = extension.strength / side.strength;
+  return extension.hits * clamp((ratio - 0.5) / 0.3, 0, 1);
+}
+
+/**
  * How convincingly the quad's outline is a real edge: the weakest side's
  * edge share. A sleeve needs all four sides; a shadow's or texture blob's
  * outline is blurry or patchy on at least one of them.
@@ -327,19 +361,6 @@ function sideEdge(a, b, grad, t0, t1) {
  * the extension costs support. (Some overshoot is normal: grain or cover
  * art crossing the extension at a shallow angle.)
  */
-/**
- * How much the edge past a corner looks like the *same* edge carrying on:
- * its hits, counted only when it's about as strong as the side itself. A
- * sleeve edge lying along a fainter grain line doesn't continue; a grain
- * line, or a sleeve edge running past a fake corner, does.
- */
-function continuation(side, extension) {
-  if (side.strength <= 0) return 0;
-  const ratio = extension.strength / side.strength;
-  return extension.hits * Math.min(1, Math.max(0, (ratio - 0.5) / 0.3));
-}
-
-
 function edgeSupport(quad, grad) {
   let weakest = 1;
   for (let i = 0; i < 4; i++) {
@@ -351,7 +372,7 @@ function edgeSupport(quad, grad) {
       continuation(on, sideEdge(a, b, grad, -0.3, -0.04)),
       continuation(on, sideEdge(a, b, grad, 1.04, 1.3)),
     );
-    const penalty = 0.8 * Math.min(1, Math.max(0, (overshoot - 0.35) / 0.65));
+    const penalty = 0.8 * clamp((overshoot - 0.35) / 0.65, 0, 1);
     weakest = Math.min(weakest, on.hits * (1 - penalty));
     if (weakest <= MIN_SUPPORT) return weakest; // can't make the cut; skip the rest
   }
@@ -428,27 +449,15 @@ function quadsFromLines(edges, size, track) {
       if (corners.some((p) => !p)) continue;
       const inside = corners.every(
         (p) =>
-          p.x > -margin &&
-          p.y > -margin &&
-          p.x < size.width + margin &&
-          p.y < size.height + margin,
+          p.x > -margin && p.y > -margin && p.x < size.width + margin && p.y < size.height + margin,
       );
       if (!inside) continue;
       const ordered = orderClockwise(corners);
-      let area = 0;
-      for (let k = 0; k < 4; k++) {
-        const p = ordered[k];
-        const q = ordered[(k + 1) % 4];
-        area += p.x * q.y - q.x * p.y;
-      }
-      if (Math.abs(area) / 2 >= size.width * size.height * MIN_AREA_FRACTION) quads.push(ordered);
+      if (polygonArea(ordered) >= size.width * size.height * MIN_AREA_FRACTION) quads.push(ordered);
     }
   }
   return quads;
 }
-
-const MAX_CANDIDATES = 40;
-const MIN_SUPPORT = 0.25;
 
 /**
  * Candidate sleeve outlines: { corners (unordered), support (0–1) },
