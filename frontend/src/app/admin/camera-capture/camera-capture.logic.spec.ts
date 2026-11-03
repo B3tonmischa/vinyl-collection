@@ -12,6 +12,7 @@ import {
   guideCircle,
   guideFrameQuad,
   isPlausibleSleeveQuad,
+  loupeSide,
   orderCorners,
   pickSleeveQuad,
   pointInQuad,
@@ -184,6 +185,13 @@ describe('guideFrameQuad / guideCircle', () => {
 describe('clampPoint', () => {
   it('keeps handles inside the image', () => {
     expect(clampPoint({ x: -5, y: 900 }, frame)).toEqual({ x: 0, y: 800 });
+  });
+});
+
+describe('loupeSide', () => {
+  it('puts the magnifier on the side away from the handle', () => {
+    expect(loupeSide({ x: 100, y: 50 }, frame)).toBe('right');
+    expect(loupeSide({ x: 900, y: 50 }, frame)).toBe('left');
   });
 });
 

@@ -360,6 +360,14 @@ export function discOutputSize(circle: Circle, maxEdge = OUTPUT_MAX_EDGE): numbe
   return Math.max(1, Math.round(Math.min(maxEdge, circle.r * 2)));
 }
 
+/**
+ * Which top corner the magnifier goes in while a handle is dragged: the
+ * side away from the handle, so it never covers the spot being placed.
+ */
+export function loupeSide(handle: Point, frame: Size): 'left' | 'right' {
+  return handle.x < frame.width / 2 ? 'right' : 'left';
+}
+
 export interface Rect extends Point, Size {}
 
 /** Axis-aligned bounds of a quad, used when OpenCV isn't available to warp. */

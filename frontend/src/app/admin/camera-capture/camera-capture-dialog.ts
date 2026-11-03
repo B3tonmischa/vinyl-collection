@@ -14,6 +14,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import {
   Circle,
+  DETECT_MAX_EDGE,
   LIVE_DETECT_MAX_EDGE,
   Point,
   Quad,
@@ -21,8 +22,10 @@ import {
   circleMaskPath,
   clampCircle,
   clampPoint,
+  fitScale,
   guideCircle,
   guideFrameQuad,
+  loupeSide,
   pickSleeveQuad,
   quadMaskPath,
   quadPoints,
@@ -35,12 +38,14 @@ import {
   cropDiscToPngFile,
   cropSleeveWithoutWarp,
   detectionImage,
+  drawLoupe,
   fileToWorkingCanvas,
   fullImageData,
   imageDataToJpegFile,
   toWorkingCanvas,
 } from './camera-crop';
 import { OpenCvScanDetector } from './scan-detector';
+import { REFINE_BAND_DETECTION_PX, refineSleeveQuad } from './sleeve-refine';
 import {
   ScanStep,
   StepStatus,
@@ -79,6 +84,24 @@ const LIVE_DETECT_INTERVAL_MS = 250;
 const LIVE_MISSES_BEFORE_CLEAR = 2;
 /** Crop-handle radius as a share of the photo's longer edge. */
 const HANDLE_RADIUS_FRACTION = 0.022;
+/** On-screen size of the magnifier shown while dragging a handle. */
+const LOUPE_CSS_PX = 128;
+/** How much bigger the magnifier shows the photo than the adjust screen. */
+const LOUPE_ZOOM = 3;
+
+/**
+ * Snaps a detected outline onto the sleeve's edges at the photo's full
+ * working resolution (detection only saw a downscaled copy). Keeps the
+ * detected outline if the pixels can't be read, e.g. out of memory.
+ */
+function refineSleeve(canvas: HTMLCanvasElement, quad: Quad): Quad {
+  const band = REFINE_BAND_DETECTION_PX / fitScale(canvasSize(canvas), DETECT_MAX_EDGE);
+  try {
+    return refineSleeveQuad(fullImageData(canvas), quad, band);
+  } catch {
+    return quad;
+  }
+}
 
 /**
  * Full-screen camera for photographing sleeves and discs, opened from
@@ -146,6 +169,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
   private readonly still = viewChild.required<ElementRef<HTMLCanvasElement>>('still');
   private readonly adjustSvg = viewChild<ElementRef<SVGSVGElement>>('adjustSvg');
+  private readonly loupe = viewChild.required<ElementRef<HTMLCanvasElement>>('loupe');
 
   protected readonly guided = this.data.kind === 'guided' ? this.data : null;
   protected readonly phase = signal<Phase>(this.guided ? 'setup' : 'viewfinder');
@@ -172,6 +196,9 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   protected readonly quad = signal<Quad | null>(null);
   protected readonly circle = signal<Circle | null>(null);
   protected readonly autoDetected = signal(false);
+  /** Top corner the magnifier shows in while a handle is dragged, else null. */
+  protected readonly loupeAt = signal<'left' | 'right' | null>(null);
+  protected readonly loupeCssPx = LOUPE_CSS_PX;
 
   protected readonly step = computed<ScanStep | undefined>(() => this.steps()[this.stepIndex()]);
 
@@ -398,7 +425,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
     if (this.step()?.mode === 'sleeve') {
       const quad = await this.detectSleeve(image, size);
       this.autoDetected.set(!!quad);
-      this.quad.set(quad ?? guideFrameQuad(size));
+      this.quad.set(quad ? refineSleeve(canvas, quad) : guideFrameQuad(size));
     } else {
       const circle = await this.detectDisc(image, size);
       this.autoDetected.set(!!circle);
@@ -410,20 +437,21 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   protected startDrag(handle: DragHandle, event: PointerEvent): void {
     event.preventDefault();
     this.dragging = handle;
-    // Grabbing the disc anywhere moves it by the finger's delta rather
-    // than snapping its center under the finger.
+    // Handles move by the finger's delta rather than snapping under the
+    // finger, so nothing jumps when grabbed off-center.
     const p = this.toStillCoords(event);
-    const c = this.circle();
-    this.grabOffset =
-      handle === 'center' && p && c ? { x: c.cx - p.x, y: c.cy - p.y } : { x: 0, y: 0 };
+    const anchor = this.handlePoint(handle);
+    this.grabOffset = p && anchor ? { x: anchor.x - p.x, y: anchor.y - p.y } : { x: 0, y: 0 };
     this.adjustSvg()?.nativeElement.setPointerCapture(event.pointerId);
+    this.updateLoupe();
   }
 
   protected onDrag(event: PointerEvent): void {
     const handle = this.dragging;
     if (handle === null) return;
-    const p = this.toStillCoords(event);
-    if (!p) return;
+    const finger = this.toStillCoords(event);
+    if (!finger) return;
+    const p = { x: finger.x + this.grabOffset.x, y: finger.y + this.grabOffset.y };
     const size = this.stillSize();
     if (typeof handle === 'object') {
       const quad = this.quad();
@@ -436,14 +464,48 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
       if (!c) return;
       const moved =
         handle === 'center'
-          ? { ...c, cx: p.x + this.grabOffset.x, cy: p.y + this.grabOffset.y }
+          ? { ...c, cx: p.x, cy: p.y }
           : { ...c, r: Math.hypot(p.x - c.cx, p.y - c.cy) };
       this.circle.set(clampCircle(moved, size));
     }
+    this.updateLoupe();
   }
 
   protected endDrag(): void {
     this.dragging = null;
+    this.loupeAt.set(null);
+  }
+
+  /** Where a handle currently sits, in still-image pixels. */
+  private handlePoint(handle: DragHandle): Point | null {
+    if (typeof handle === 'object') return this.quad()?.[handle.corner] ?? null;
+    const c = this.circle();
+    if (!c) return null;
+    return handle === 'center' ? { x: c.cx, y: c.cy } : { x: c.cx + c.r, y: c.cy };
+  }
+
+  /**
+   * Redraws the magnifier around the corner or rim handle being dragged
+   * (the finger hides exactly the spot that needs placing). Moving the
+   * whole disc doesn't need one.
+   */
+  private updateLoupe(): void {
+    const handle = this.dragging;
+    const point = handle && handle !== 'center' ? this.handlePoint(handle) : null;
+    const outline = typeof handle === 'object' ? this.quad() : this.circle();
+    const still = this.still().nativeElement;
+    const shownWidth = still.getBoundingClientRect().width;
+    if (!point || !outline || !shownWidth) {
+      this.loupeAt.set(null);
+      return;
+    }
+    const loupe = this.loupe().nativeElement;
+    const pixels = Math.round(LOUPE_CSS_PX * devicePixelRatio);
+    if (loupe.width !== pixels) loupe.width = loupe.height = pixels;
+    // How many photo pixels the loupe's width covers on screen, cut by the zoom.
+    const span = (LOUPE_CSS_PX * still.width) / (shownWidth * LOUPE_ZOOM);
+    drawLoupe(loupe, still, point, span, outline);
+    this.loupeAt.set(loupeSide(point, this.stillSize()));
   }
 
   private toStillCoords(event: PointerEvent): Point | null {
