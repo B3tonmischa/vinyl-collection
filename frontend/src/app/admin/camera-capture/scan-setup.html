@@ -1,0 +1,73 @@
+<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 text-sm">
+  <p class="mb-4 text-neutral-400">
+    Choose what to photograph. Slots that already have a photo start unticked — tick them to take a
+    new one.
+  </p>
+  <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Packaging</h3>
+  <ul class="mb-5 space-y-1">
+    @for (item of packagingItems(); track slotKey(item.step)) {
+      <li>
+        <ng-container *ngTemplateOutlet="row; context: { $implicit: item }"></ng-container>
+      </li>
+    }
+  </ul>
+  <div class="mb-2 flex items-center justify-between">
+    <h3 class="text-xs font-semibold uppercase tracking-wide text-neutral-500">Discs</h3>
+    <div class="flex items-center gap-3">
+      <button
+        type="button"
+        (click)="changeDiscs(-1)"
+        [disabled]="discCount() <= 1"
+        class="h-8 w-8 rounded-full bg-neutral-800 text-lg leading-none disabled:opacity-30"
+        aria-label="One disc less"
+      >
+        −
+      </button>
+      <span class="w-14 text-center"
+        >{{ discCount() }} {{ discCount() === 1 ? 'disc' : 'discs' }}</span
+      >
+      <button
+        type="button"
+        (click)="changeDiscs(1)"
+        [disabled]="discCount() >= maxDiscs"
+        class="h-8 w-8 rounded-full bg-neutral-800 text-lg leading-none disabled:opacity-30"
+        aria-label="One disc more"
+      >
+        +
+      </button>
+    </div>
+  </div>
+  <ul class="space-y-1">
+    @for (item of discItems(); track slotKey(item.step)) {
+      <li>
+        <ng-container *ngTemplateOutlet="row; context: { $implicit: item }"></ng-container>
+      </li>
+    }
+  </ul>
+</div>
+
+<div class="px-4 pb-6 pt-3 text-sm">
+  <button
+    type="button"
+    (click)="submit()"
+    [disabled]="selectedCount() === 0"
+    class="w-full rounded bg-white py-3 font-medium text-neutral-900 hover:bg-neutral-200 disabled:opacity-40"
+  >
+    Start — {{ selectedCount() }} {{ selectedCount() === 1 ? 'photo' : 'photos' }}
+  </button>
+</div>
+
+<ng-template #row let-item>
+  <label class="flex cursor-pointer items-center gap-3 rounded bg-neutral-900 px-3 py-2.5">
+    <input
+      type="checkbox"
+      class="h-5 w-5 accent-white"
+      [checked]="item.selected"
+      (change)="toggleItem(item)"
+    />
+    <span class="flex-1">{{ item.step.label }}</span>
+    @if (item.filled) {
+      <span class="text-xs text-emerald-400">has photo</span>
+    }
+  </label>
+</ng-template>

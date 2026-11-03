@@ -12,6 +12,20 @@ ng serve
 
 Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
 
+### Testing the camera on a phone
+
+The admin "Photo" / "Scan record" buttons use the live camera, which browsers only allow over HTTPS (or on `localhost`). To try it from a phone on the same Wi-Fi, start the backend as usual and run:
+
+```bash
+npm run start:lan
+```
+
+Then open `https://<this-pc's-LAN-IP>:4200/` on the phone and accept the self-signed certificate warning once. The dev server proxies `/api` to the backend on `localhost:3000`, so nothing else needs reconfiguring. Windows may ask to allow Node through the firewall the first time.
+
+On Android there's a zero-certificate alternative: connect the phone over USB, open `chrome://inspect#devices` on the PC, add port forwarding `4200 → localhost:4200` (and `3000 → localhost:3000`), and browse to `http://localhost:4200` on the phone with the normal `npm start`.
+
+Auto-crop uses a self-hosted OpenCV.js (`public/vendor/opencv/`, about 10 MB). It is only downloaded the first time the camera opens. If it can't load, the camera still works and falls back to the guide frame plus manual adjustment.
+
 ## Code scaffolding
 
 Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
