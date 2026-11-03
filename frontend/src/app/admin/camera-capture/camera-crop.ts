@@ -27,6 +27,9 @@ function newCanvas(size: Size): [HTMLCanvasElement, CanvasRenderingContext2D] {
   canvas.height = size.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('Canvas 2D context unavailable');
+  // The default ("low") aliases big reductions like 3000 → 800 px, which
+  // jags the sleeve's edges that detection works from.
+  ctx.imageSmoothingQuality = 'high';
   return [canvas, ctx];
 }
 

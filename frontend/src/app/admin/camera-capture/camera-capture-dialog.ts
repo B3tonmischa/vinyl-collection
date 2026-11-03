@@ -14,6 +14,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import {
   Circle,
+  DETECT_MAX_EDGE,
   LIVE_DETECT_MAX_EDGE,
   Point,
   Quad,
@@ -21,6 +22,7 @@ import {
   circleMaskPath,
   clampCircle,
   clampPoint,
+  fitScale,
   guideCircle,
   guideFrameQuad,
   loupeSide,
@@ -43,6 +45,7 @@ import {
   toWorkingCanvas,
 } from './camera-crop';
 import { OpenCvScanDetector } from './scan-detector';
+import { REFINE_BAND_DETECTION_PX, refineSleeveQuad } from './sleeve-refine';
 import {
   ScanStep,
   StepStatus,
@@ -85,6 +88,20 @@ const HANDLE_RADIUS_FRACTION = 0.022;
 const LOUPE_CSS_PX = 128;
 /** How much bigger the magnifier shows the photo than the adjust screen. */
 const LOUPE_ZOOM = 3;
+
+/**
+ * Snaps a detected outline onto the sleeve's edges at the photo's full
+ * working resolution (detection only saw a downscaled copy). Keeps the
+ * detected outline if the pixels can't be read, e.g. out of memory.
+ */
+function refineSleeve(canvas: HTMLCanvasElement, quad: Quad): Quad {
+  const band = REFINE_BAND_DETECTION_PX / fitScale(canvasSize(canvas), DETECT_MAX_EDGE);
+  try {
+    return refineSleeveQuad(fullImageData(canvas), quad, band);
+  } catch {
+    return quad;
+  }
+}
 
 /**
  * Full-screen camera for photographing sleeves and discs, opened from
@@ -408,7 +425,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
     if (this.step()?.mode === 'sleeve') {
       const quad = await this.detectSleeve(image, size);
       this.autoDetected.set(!!quad);
-      this.quad.set(quad ?? guideFrameQuad(size));
+      this.quad.set(quad ? refineSleeve(canvas, quad) : guideFrameQuad(size));
     } else {
       const circle = await this.detectDisc(image, size);
       this.autoDetected.set(!!circle);
