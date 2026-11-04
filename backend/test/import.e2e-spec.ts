@@ -91,6 +91,7 @@ describe('Discogs import', () => {
   afterEach(() => {
     discogs.search.mockReset();
     discogs.getRelease.mockReset();
+    discogs.downloadImage.mockClear();
   });
 
   afterAll(async () => {
@@ -146,7 +147,7 @@ describe('Discogs import', () => {
     it('creates a real, fully editable vinyl record with artists, tracks, format mapping, and images resolved', async () => {
       discogs.getRelease.mockResolvedValue(releaseFixture());
 
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.get('/import/discogs/249504').query({ images: true }).expect(200);
 
       expect(res.body).toMatchObject({
         title: 'OK Computer',
@@ -185,6 +186,25 @@ describe('Discogs import', () => {
 
       // The record is real and shows up through the normal read path too.
       await request(ctx.httpServer).get(`/vinyls/${res.body.id}`).expect(200);
+    });
+
+    it.each([
+      ['by default', {}],
+      ['when images=false', { images: false }],
+    ])('imports the metadata but no images %s', async (_label, query) => {
+      discogs.getRelease.mockResolvedValue(releaseFixture());
+
+      const res = await admin.get('/import/discogs/249504').query(query).expect(200);
+
+      expect(res.body).toMatchObject({ title: 'OK Computer', label: 'Parlophone' });
+      expect(res.body.tracks).toHaveLength(3);
+      expect(res.body.images).toEqual([]);
+      expect(discogs.downloadImage).not.toHaveBeenCalled();
+    });
+
+    it('400s on an images value that is not a boolean, before creating anything', async () => {
+      await admin.get('/import/discogs/249504').query({ images: 'yes' }).expect(400);
+      expect(discogs.getRelease).not.toHaveBeenCalled();
     });
 
     it('omits a track override when its Discogs-credited artist matches the album artist(s)', async () => {
@@ -291,7 +311,7 @@ describe('Discogs import', () => {
         .mockRejectedValueOnce(new Error('CDN hiccup'))
         .mockResolvedValueOnce(ONE_PIXEL_PNG);
 
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.get('/import/discogs/249504').query({ images: true }).expect(200);
       expect(res.body.images).toHaveLength(1);
     });
   });

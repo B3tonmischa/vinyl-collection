@@ -8,9 +8,9 @@ import { DiscogsSearchCandidate, DiscogsSearchQuery } from '../../models/discogs
 /**
  * What GET /import/discogs/:releaseId actually returns: per the deviation
  * documented in discogs-import-implementation-status.md, importing a
- * release creates a real, persisted Vinyl (images already attached) rather
- * than a non-persisted draft — so this is a full Vinyl, plus the Discogs
- * release link for attribution.
+ * release creates a real, persisted Vinyl (with images attached if they were
+ * requested) rather than a non-persisted draft — so this is a full Vinyl,
+ * plus the Discogs release link for attribution.
  */
 export interface ImportedVinyl extends Vinyl {
   discogsReleaseUrl: string | null;
@@ -36,9 +36,10 @@ export class DiscogsImportApiService {
     );
   }
 
-  importRelease(discogsReleaseId: number): Promise<ImportedVinyl> {
+  importRelease(discogsReleaseId: number, importImages: boolean): Promise<ImportedVinyl> {
     return firstValueFrom(
       this.http.get<ImportedVinyl>(`${this.apiConfig.apiUrl}/import/discogs/${discogsReleaseId}`, {
+        params: { images: importImages },
         withCredentials: true,
       }),
     );
