@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { ImportService } from './import.service';
+import { DiscogsImportQueryDto } from './dto/discogs-import-query.dto';
 import { DiscogsSearchQueryDto } from './dto/discogs-search-query.dto';
 
 // No @Public() anywhere here — searching and importing are admin-only
@@ -14,7 +15,10 @@ export class ImportController {
   }
 
   @Get(':releaseId')
-  importRelease(@Param('releaseId', ParseIntPipe) releaseId: number) {
-    return this.importService.importRelease(releaseId);
+  importRelease(
+    @Param('releaseId', ParseIntPipe) releaseId: number,
+    @Query() query: DiscogsImportQueryDto,
+  ) {
+    return this.importService.importRelease(releaseId, query.images ?? false);
   }
 }

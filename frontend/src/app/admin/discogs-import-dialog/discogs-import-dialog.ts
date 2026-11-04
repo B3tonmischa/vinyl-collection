@@ -12,11 +12,13 @@ import { DiscogsSearchCandidate } from '../../models/discogs.model';
  * undefined means cancelled.
  *
  * Picking a result doesn't just "load a draft" — the import endpoint
- * already creates a real, persisted vinyl record (with images attached)
- * before this resolves, per the deviation documented in
- * discogs-import-implementation-status.md. So there's no separate
- * "confirm before saving" step here; review/edit happens on the normal
- * edit page the caller navigates to next.
+ * already creates a real, persisted vinyl record before this resolves, per
+ * the deviation documented in discogs-import-implementation-status.md. So
+ * there's no separate "confirm before saving" step here; review/edit happens
+ * on the normal edit page the caller navigates to next. That also means the
+ * "Import images" checkbox has to be set before picking: it's off by default
+ * since images usually come from camera capture instead, and only affects
+ * the import itself, not the Discogs thumbnails in the result list.
  */
 @Component({
   selector: 'app-discogs-import-dialog',
@@ -32,6 +34,7 @@ export class DiscogsImportDialogComponent {
   protected readonly title = signal('');
   protected readonly barcode = signal('');
   protected readonly catno = signal('');
+  protected readonly importImages = signal(false);
 
   protected readonly searching = signal(false);
   protected readonly importing = signal(false);
@@ -73,7 +76,10 @@ export class DiscogsImportDialogComponent {
     this.importing.set(true);
     this.error.set(null);
     try {
-      const imported = await this.discogsApi.importRelease(candidate.discogsReleaseId);
+      const imported = await this.discogsApi.importRelease(
+        candidate.discogsReleaseId,
+        this.importImages(),
+      );
       this.dialogRef.close(imported);
     } catch {
       this.error.set("Couldn't import that release from Discogs.");

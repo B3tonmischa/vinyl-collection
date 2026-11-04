@@ -57,7 +57,18 @@
   }
 
   @if (searched()) {
-    <div class="mt-4 max-h-80 divide-y divide-neutral-200 overflow-y-auto rounded border border-neutral-200">
+    <label class="mt-4 flex items-center gap-2">
+      <input
+        type="checkbox"
+        class="h-4 w-4 rounded border-neutral-300"
+        [checked]="importImages()"
+        [disabled]="importing()"
+        (change)="importImages.set($any($event.target).checked)"
+      />
+      <span class="text-sm font-medium text-neutral-700">Import images</span>
+    </label>
+
+    <div class="mt-2 max-h-80 divide-y divide-neutral-200 overflow-y-auto rounded border border-neutral-200">
       @for (candidate of results(); track candidate.discogsReleaseId) {
         <button
           type="button"

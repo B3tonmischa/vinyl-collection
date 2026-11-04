@@ -67,8 +67,10 @@ export class ImportService {
 
   /**
    * Fetches a Discogs release and imports it as a brand-new, fully
-   * editable Vinyl record — including downloading and saving its images
-   * through the existing upload pipeline.
+   * editable Vinyl record. Its images are only downloaded and saved through
+   * the existing upload pipeline when `includeImages` is set — otherwise the
+   * record starts with empty slots, to be filled by camera capture or a
+   * manual upload on the edit page.
    *
    * Deviation from the original draft plan, worth flagging explicitly (see
    * discogs-import-implementation-status.md): the plan described this
@@ -79,15 +81,15 @@ export class ImportService {
    * how images are actually stored: UploadsService.saveImage() requires an
    * existing vinylId to attach to (see uploads.service.ts) — there's no
    * slot to upload into before a Vinyl row exists. So this method creates
-   * the Vinyl row (and its artists/tracks) up front, then attaches images
-   * to that real id, then returns the full persisted record. The frontend
+   * the Vinyl row (and its artists/tracks) up front, then attaches any
+   * images to that real id, then returns the full persisted record. The frontend
    * therefore routes to the *edit* page for the new id rather than a blank
    * "new" form — see discogs-import-dialog.ts / admin-shell.ts. The
    * accepted orphan-row risk from question #1 (an abandoned import leaves a
    * real, unreviewed Vinyl row + images behind) is exactly this — undoing
    * it is just deleting the record via the normal delete button.
    */
-  async importRelease(releaseId: number) {
+  async importRelease(releaseId: number, includeImages: boolean) {
     const release = await this.discogsClient.getRelease(releaseId);
 
     const albumArtists = await this.resolveArtists(release.artists ?? []);
@@ -167,7 +169,9 @@ export class ImportService {
 
     const created = await this.vinylsService.create(dto);
 
-    await this.importImages(created.id, release.images ?? []);
+    if (includeImages) {
+      await this.importImages(created.id, release.images ?? []);
+    }
 
     const finalVinyl = await this.vinylsService.findOne(created.id);
     return {

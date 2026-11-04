@@ -90,9 +90,9 @@ describe('DiscogsImportApiService', () => {
   });
 
   it('importRelease() GETs the release-specific import endpoint', async () => {
-    const promise = service.importRelease(249504);
+    const promise = service.importRelease(249504, false);
 
-    const req = httpMock.expectOne(`${API_URL}/import/discogs/249504`);
+    const req = httpMock.expectOne(`${API_URL}/import/discogs/249504?images=false`);
     expect(req.request.method).toBe('GET');
     expect(req.request.withCredentials).toBe(true);
     req.flush(sampleImportedVinyl);
@@ -100,10 +100,19 @@ describe('DiscogsImportApiService', () => {
     await expect(promise).resolves.toEqual(sampleImportedVinyl);
   });
 
-  it('rejects when the backend responds with an error status', async () => {
-    const promise = service.importRelease(999999);
+  it('importRelease() asks for images when told to', async () => {
+    const promise = service.importRelease(249504, true);
 
-    const req = httpMock.expectOne(`${API_URL}/import/discogs/999999`);
+    const req = httpMock.expectOne(`${API_URL}/import/discogs/249504?images=true`);
+    req.flush(sampleImportedVinyl);
+
+    await promise;
+  });
+
+  it('rejects when the backend responds with an error status', async () => {
+    const promise = service.importRelease(999999, false);
+
+    const req = httpMock.expectOne(`${API_URL}/import/discogs/999999?images=false`);
     req.flush({ message: 'Discogs release not found' }, { status: 404, statusText: 'Not Found' });
 
     await expect(promise).rejects.toBeTruthy();
