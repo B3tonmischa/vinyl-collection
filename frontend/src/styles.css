@@ -1,3 +1,11 @@
 /* You can add global styles to this file, and also import other style files */
 
 @import 'tailwindcss';
+
+/*
+ * The admin header is sticky, so keep focused fields and page-key scrolling
+ * clear of it. Tall enough for the wrapped header on narrow screens (~85px).
+ */
+html:has(app-admin-shell) {
+  scroll-padding-top: 6rem;
+}
