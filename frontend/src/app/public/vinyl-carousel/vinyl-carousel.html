@@ -8,7 +8,7 @@
       <div class="relative h-full w-full">
         @for (card of spinCards(); track card.virtualIndex) {
           <div
-            class="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
+            class="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg shadow-md"
             [style.left]="'calc(50% + ' + card.offsetPx + 'px)'"
             [style.width.px]="card.style.widthPx"
             [style.opacity]="card.style.opacity"
@@ -21,7 +21,7 @@
       @for (item of windowCards(); track item.index) {
         <button
           type="button"
-          class="shrink-0 cursor-pointer transition-all duration-300 ease-out"
+          class="shrink-0 cursor-pointer rounded-lg shadow-md transition-all duration-300 ease-out"
           [class]="cardSizeClass(item.offset)"
           (click)="onCardClick(item)"
         >
