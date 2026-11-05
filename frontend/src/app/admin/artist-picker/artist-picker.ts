@@ -25,6 +25,10 @@ export class ArtistPickerComponent {
       .map((a) => ({ id: a.id, label: a.name }));
   }
 
+  protected get existingNames(): string[] {
+    return (this.searchResource.value() ?? []).map((a) => a.name);
+  }
+
   protected onQueryChange(value: string): void {
     this.query.set(value);
   }

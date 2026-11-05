@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, signal } from '@angular/core';
 import { OverlayModule } from '@angular/cdk/overlay';
+import { canCreateOption } from './combobox.logic';
 
 export interface ComboboxOption {
   id: number;
@@ -23,6 +24,8 @@ export class ComboboxComponent {
   @Input() placeholder = 'Search…';
   @Input() loading = false;
   @Input() allowCreate = true;
+  /** Every label matching the query, including ones left out of `options`. */
+  @Input() existingLabels: string[] = [];
 
   @Output() queryChange = new EventEmitter<string>();
   @Output() optionSelected = new EventEmitter<ComboboxOption>();
@@ -30,6 +33,10 @@ export class ComboboxComponent {
 
   protected readonly query = signal('');
   protected readonly isOpen = signal(false);
+
+  protected get canCreate(): boolean {
+    return this.allowCreate && canCreateOption(this.query(), this.existingLabels);
+  }
 
   protected onInput(value: string): void {
     this.query.set(value);

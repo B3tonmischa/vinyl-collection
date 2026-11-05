@@ -38,6 +38,7 @@
   <app-combobox
     placeholder="Add a guest artist…"
     [options]="comboboxOptions"
+    [existingLabels]="existingNames"
     [loading]="searchResource.isLoading()"
     (queryChange)="onQueryChange($event)"
     (optionSelected)="onOptionSelected($event)"

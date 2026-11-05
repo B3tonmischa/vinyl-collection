@@ -11,7 +11,7 @@
               <span class="mr-2 text-sm tabular-nums text-neutral-400">{{ track.position }}</span>
               <span class="text-sm text-neutral-900">{{ track.title }}</span>
             </div>
-            @if (differsFromAlbum(track)) {
+            @if (showsArtists(track)) {
               <span class="shrink-0 text-xs text-neutral-500">{{ artistNames(track.effectiveArtists) }}</span>
             }
           </li>

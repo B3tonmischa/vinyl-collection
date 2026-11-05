@@ -37,20 +37,19 @@
               {{ option.label }}
             </button>
           </li>
-        } @empty {
-          @if (allowCreate && query().trim().length > 0) {
-            <li>
-              <button
-                type="button"
-                class="block w-full px-3 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-100"
-                (click)="createNew()"
-              >
-                + Add "{{ query() }}"
-              </button>
-            </li>
-          } @else {
-            <li class="px-3 py-1.5 text-sm text-neutral-400">No matches</li>
-          }
+        }
+        @if (canCreate) {
+          <li>
+            <button
+              type="button"
+              class="block w-full px-3 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-100"
+              (click)="createNew()"
+            >
+              + Add "{{ query() }}"
+            </button>
+          </li>
+        } @else if (options.length === 0) {
+          <li class="px-3 py-1.5 text-sm text-neutral-400">No matches</li>
         }
       }
     </ul>
