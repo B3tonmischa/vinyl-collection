@@ -42,7 +42,6 @@ function makeVinyl(overrides: Partial<Vinyl>): Vinyl {
     speed: null,
     genre: null,
     notes: null,
-    signedByArtist: false,
     artists: [],
     tracks: [],
     images: [],
