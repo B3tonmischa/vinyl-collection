@@ -48,7 +48,7 @@ const SPIN_GAP_PX = 12;
         left: 6%;
         right: 6%;
         height: 9%;
-        margin-top: 4%;
+        margin-top: 2%;
         background: radial-gradient(closest-side, rgb(0 0 0 / 0.35), transparent);
         pointer-events: none;
       }
