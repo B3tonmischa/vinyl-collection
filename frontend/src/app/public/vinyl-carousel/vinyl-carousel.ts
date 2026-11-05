@@ -33,6 +33,27 @@ const SPIN_GAP_PX = 12;
   imports: [VinylCardComponent],
   templateUrl: './vinyl-carousel.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [
+    `
+      /*
+       * A soft ellipse on the "ground" below the cover, with a gap so the
+       * record looks like it's hovering. Sized in percentages so it scales
+       * with the card through the spin and the size transitions. The
+       * caption sits below it — see .caption-overlay in VinylCardComponent.
+       */
+      .floating-card::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 6%;
+        right: 6%;
+        height: 9%;
+        margin-top: 4%;
+        background: radial-gradient(closest-side, rgb(0 0 0 / 0.35), transparent);
+        pointer-events: none;
+      }
+    `,
+  ],
   host: {
     tabindex: '0',
     class: 'block h-full w-full outline-none',

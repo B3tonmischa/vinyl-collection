@@ -28,6 +28,11 @@ import { Vinyl } from '../../models/vinyl.model';
       .animate-caption-drop-in {
         animation: caption-drop-in 350ms ease-out;
       }
+
+      /* Clears the carousel's floating shadow, and scales with it. */
+      .caption-overlay {
+        margin-top: 14%;
+      }
     `,
   ],
 })
