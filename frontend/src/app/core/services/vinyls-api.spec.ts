@@ -18,7 +18,6 @@ const samplePayload: VinylPayload = {
   speed: 'RPM_33',
   genre: 'Progressive Rock',
   notes: null,
-  signedByArtist: false,
   artistIds: [1],
   tracks: [{ position: 1, title: 'Speak to Me', side: 'A' }],
 };
@@ -34,7 +33,6 @@ const sampleVinyl: Vinyl = {
   speed: 'RPM_33',
   genre: 'Progressive Rock',
   notes: null,
-  signedByArtist: false,
   artists: [{ id: 1, name: 'Pink Floyd' }],
   tracks: [],
   images: [],
