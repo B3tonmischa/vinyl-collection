@@ -45,6 +45,8 @@
         />
       </section>
     }
+
+    <a routerLink="/" class="mt-8 inline-block text-sm text-neutral-500 hover:text-neutral-800">← Back to collection</a>
   </div>
 } @else {
   <div class="flex h-64 flex-col items-center justify-center gap-2 text-neutral-400">
@@ -53,4 +55,5 @@
   </div>
 }
 
-<app-scroll-to-top />
+<!-- Most records are too short to scroll past the default threshold. -->
+<app-scroll-to-top [showAfter]="100" />
