@@ -1,11 +1,8 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
-
-/** Scroll distance (px) past which the button becomes visible. */
-const SHOW_AFTER_PX = 400;
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 /**
  * Floating "back to top" button. Hidden until the window has scrolled past
- * SHOW_AFTER_PX; smooth-scrolls to the top on click (instant when the user
+ * `showAfter`; smooth-scrolls to the top on click (instant when the user
  * prefers reduced motion).
  */
 @Component({
@@ -15,10 +12,14 @@ const SHOW_AFTER_PX = 400;
   host: { '(window:scroll)': 'onScroll()' },
 })
 export class ScrollToTop {
-  protected readonly visible = signal(window.scrollY > SHOW_AFTER_PX);
+  /** Scroll distance (px) past which the button becomes visible. */
+  readonly showAfter = input(400);
+
+  private readonly scrollY = signal(window.scrollY);
+  protected readonly visible = computed(() => this.scrollY() > this.showAfter());
 
   protected onScroll(): void {
-    this.visible.set(window.scrollY > SHOW_AFTER_PX);
+    this.scrollY.set(window.scrollY);
   }
 
   protected scrollToTop(): void {
