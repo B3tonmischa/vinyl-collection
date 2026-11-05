@@ -86,9 +86,29 @@ function withMats(fn) {
 const MAX_CONTOURS_PER_MAP = 12;
 const MIN_AREA_FRACTION = 0.06;
 /** Most candidates handed back to the main thread. */
-const MAX_CANDIDATES = 40;
+const MAX_CANDIDATES = 80;
 /** Candidates whose weakest side has less edge support are dropped. */
 const MIN_SUPPORT = 0.25;
+// How much of a side's support is lost for an edge running on past its corners.
+const OVERSHOOT_PENALTY_BOTH_ENDS = 0.8;
+const OVERSHOOT_PENALTY_ONE_END = 0.5;
+/** Colors further apart than this (0–255, in any channel) aren't the same edge's. */
+const SAME_EDGE_COLOR_TOLERANCE = 40;
+/** Lines kept for quadsFromLines. A busy room has plenty besides the sleeve's. */
+const MAX_LINES = 100;
+/** Line combinations that go on to full edge scoring, best first. */
+const MAX_LINE_QUADS = 120;
+/** A combination needs at least this share of each side on an edge. */
+const MIN_LINE_SIDE_COVERAGE = 0.4;
+/** Spacing, in pixels, of the coverage samples along a line. */
+const COVERAGE_STEP = 2;
+/** How far either side of an edge its two colors are compared, in pixels. */
+const STEP_REACH = 3;
+// Roughly what isPlausibleSleeveQuad accepts, in camera-capture.logic.ts:
+// checked here so hopeless line combinations never reach edge scoring.
+const LINE_QUAD_MAX_SIDE_RATIO = 1.7;
+const LINE_QUAD_MIN_CORNER_DEG = 50;
+const LINE_QUAD_MAX_CORNER_DEG = 130;
 
 /** Binary maps whose contours may outline the sleeve. */
 function buildMaps(src, track) {
@@ -116,6 +136,7 @@ function buildMaps(src, track) {
   cv.medianBlur(gray, smooth, 7);
   const soft = track(new cv.Mat());
   cv.Canny(smooth, soft, 10, 30);
+  const softLines = track(soft.clone());
   cv.morphologyEx(soft, soft, cv.MORPH_CLOSE, close, anchor, 2);
   maps.push(soft);
 
@@ -131,7 +152,10 @@ function buildMaps(src, track) {
     cv.Canny(ch, e, 40, 120);
     cv.bitwise_or(color, e, color);
   }
+  // The low-contrast edges count for lines too: a dark sleeve in front of
+  // a dark shelf never reaches the thresholds of the other two maps.
   cv.bitwise_or(lineEdges, color, lineEdges);
+  cv.bitwise_or(lineEdges, softLines, lineEdges);
   cv.morphologyEx(color, color, cv.MORPH_CLOSE, close, anchor, 2);
   maps.push(color);
 
@@ -278,14 +302,22 @@ function gradients(src, track) {
     cv.Sobel(ch, gy, cv.CV_32F, 0, 1, 3);
     out.push({ gx: gx.data32F.slice(), gy: gy.data32F.slice() });
   }
-  return { width: src.cols, height: src.rows, channels: out, threshold: edgeThreshold(out) };
+  return {
+    width: src.cols,
+    height: src.rows,
+    channels: out,
+    threshold: edgeThreshold(out),
+    pixels: src.data.slice(),
+  };
 }
 
 /**
  * What counts as "a real edge". A clean sleeve edge after the 5×5 blur
  * gives a Sobel response in the hundreds, but a white sleeve on a light
  * table only ~30–50. So the threshold follows the photo: a few times the
- * median gradient (≈ its texture/noise level), clamped to [18, 60].
+ * median gradient (≈ its texture/noise level), clamped to [18, 36]. The
+ * cap matters in a busy room: clutter doesn't line up along a whole side
+ * the way a real edge does, so it shouldn't raise the bar for that edge.
  */
 function edgeThreshold(channels) {
   const mags = [];
@@ -297,55 +329,122 @@ function edgeThreshold(channels) {
   }
   mags.sort((a, b) => a - b);
   const median = mags[Math.floor(mags.length / 2)] || 0;
-  return clamp(median * 3, 18, 60);
+  return clamp(median * 3, 18, 36);
+}
+
+/** Largest color difference between two pixels, or 0 if either is off the image. */
+function colorStep(ax, ay, bx, by, grad) {
+  const { width, height, pixels } = grad;
+  if (ax < 0 || ay < 0 || ax >= width || ay >= height) return 0;
+  if (bx < 0 || by < 0 || bx >= width || by >= height) return 0;
+  const a = (ay * width + ax) * 4;
+  const b = (by * width + bx) * 4;
+  let most = 0;
+  for (let c = 0; c < 3; c++) most = Math.max(most, Math.abs(pixels[a + c] - pixels[b + c]));
+  return most;
+}
+
+/**
+ * Edge response at (sx, sy) across the normal (nx, ny): the strongest
+ * gradient along the normal within ±2 px, in any color channel. Only the
+ * gradient component normal to the side counts, so grain lines crossing
+ * a side don't. It must also be a step, with different colors either side:
+ * a thin printed frame, a cable or a shelf's lip has a sharp gradient too,
+ * but the same color on both sides, and isn't where a sleeve ends.
+ */
+function edgeResponse(sx, sy, nx, ny, grad) {
+  const { width, height, channels, threshold } = grad;
+  let best = 0;
+  let bestX = 0;
+  let bestY = 0;
+  for (let o = -2; o <= 2; o++) {
+    const x = Math.round(sx + nx * o);
+    const y = Math.round(sy + ny * o);
+    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+    const idx = y * width + x;
+    for (const c of channels) {
+      const g = Math.abs(c.gx[idx] * nx + c.gy[idx] * ny);
+      if (g > best) {
+        best = g;
+        bestX = sx + nx * o;
+        bestY = sy + ny * o;
+      }
+    }
+  }
+  if (best <= threshold) return best;
+  const step = colorStep(
+    Math.round(bestX - nx * STEP_REACH),
+    Math.round(bestY - ny * STEP_REACH),
+    Math.round(bestX + nx * STEP_REACH),
+    Math.round(bestY + ny * STEP_REACH),
+    grad,
+  );
+  return step > threshold / 3 ? best : 0;
+}
+
+/** Adds the color at (x, y), if it's on the image, to `sum` = [r, g, b, count]. */
+function addColor(sum, x, y, grad) {
+  const { width, height, pixels } = grad;
+  const ix = Math.round(x);
+  const iy = Math.round(y);
+  if (ix < 0 || iy < 0 || ix >= width || iy >= height) return;
+  const i = (iy * width + ix) * 4;
+  for (let c = 0; c < 3; c++) sum[c] += pixels[i + c];
+  sum[3]++;
+}
+
+/** Whether two color sums average out to about the same color. */
+function sameColor(a, b) {
+  if (!a[3] || !b[3]) return false;
+  for (let c = 0; c < 3; c++) {
+    if (Math.abs(a[c] / a[3] - b[c] / b[3]) > SAME_EDGE_COLOR_TOLERANCE) return false;
+  }
+  return true;
 }
 
 /**
  * Edge evidence along the stretch t0…t1 of side a→b (0 = a, 1 = b;
  * outside 0–1 is the side's extension past its corners): `hits`, the
- * share that runs along an edge across it, and `strength`, the mean edge
- * response there. An edge counts in any color channel, within ±2 px. Only the
- * gradient component normal to the side counts, so grain lines crossing
- * a side don't. The ends are skipped: corners are often rounded, worn or
- * occluded.
+ * share that runs along an edge across it, `strength`, the mean edge
+ * response there, and the colors either side of it. The ends are skipped:
+ * corners are often rounded, worn or occluded.
  */
 function sideEdge(a, b, grad, t0, t1) {
-  const { width, height, channels, threshold } = grad;
+  const { threshold } = grad;
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   const nx = -(b.y - a.y) / len;
   const ny = (b.x - a.x) / len;
   const samples = 32;
   let hits = 0;
   let total = 0;
+  const left = [0, 0, 0, 0];
+  const right = [0, 0, 0, 0];
   for (let k = 0; k < samples; k++) {
     const t = t0 + ((t1 - t0) * (k + 0.5)) / samples;
-    const sx = a.x + (b.x - a.x) * t;
-    const sy = a.y + (b.y - a.y) * t;
-    let best = 0;
-    for (let o = -2; o <= 2; o++) {
-      const x = Math.round(sx + nx * o);
-      const y = Math.round(sy + ny * o);
-      if (x < 0 || y < 0 || x >= width || y >= height) continue;
-      const idx = y * width + x;
-      for (const c of channels) {
-        const g = Math.abs(c.gx[idx] * nx + c.gy[idx] * ny);
-        if (g > best) best = g;
-      }
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+    const best = edgeResponse(x, y, nx, ny, grad);
+    if (best > threshold) {
+      hits++;
+      addColor(left, x - nx * STEP_REACH * 2, y - ny * STEP_REACH * 2, grad);
+      addColor(right, x + nx * STEP_REACH * 2, y + ny * STEP_REACH * 2, grad);
     }
-    if (best > threshold) hits++;
     total += Math.min(best, threshold * 6); // one hot pixel shouldn't dominate
   }
-  return { hits: hits / samples, strength: total / samples };
+  return { hits: hits / samples, strength: total / samples, left, right };
 }
 
 /**
  * How much the edge past a corner looks like the *same* edge carrying on:
- * its hits, counted only when it's about as strong as the side itself. A
- * sleeve edge lying along a fainter grain line doesn't continue; a grain
- * line, or a sleeve edge running past a fake corner, does.
+ * its hits, counted only when it's about as strong as the side itself
+ * and separates the same two colors. A sleeve edge lying along a fainter
+ * grain line doesn't continue, and nor does one that happens to line up
+ * with a shelf behind it; a grain line, or a sleeve edge running past a
+ * fake corner, does.
  */
 function continuation(side, extension) {
   if (side.strength <= 0) return 0;
+  if (!sameColor(side.left, extension.left) || !sameColor(side.right, extension.right)) return 0;
   const ratio = extension.strength / side.strength;
   return extension.hits * clamp((ratio - 0.5) / 0.3, 0, 1);
 }
@@ -359,7 +458,9 @@ function continuation(side, extension) {
  * past a corner is a wood-grain line or table edge, or a sleeve edge cut
  * short by a fake corner where clutter crosses it — so a strong edge on
  * the extension costs support. (Some overshoot is normal: grain or cover
- * art crossing the extension at a shallow angle.)
+ * art crossing the extension at a shallow angle.) Carrying on past both
+ * ends is damning, but one end proves little: in a busy room a sleeve's
+ * edge can happen to line up with a shelf behind it.
  */
 function edgeSupport(quad, grad) {
   let weakest = 1;
@@ -368,11 +469,13 @@ function edgeSupport(quad, grad) {
     const b = quad[(i + 1) % 4];
     if (Math.hypot(b.x - a.x, b.y - a.y) < 10) return 0;
     const on = sideEdge(a, b, grad, 0.1, 0.9);
-    const overshoot = Math.max(
-      continuation(on, sideEdge(a, b, grad, -0.3, -0.04)),
-      continuation(on, sideEdge(a, b, grad, 1.04, 1.3)),
+    const before = continuation(on, sideEdge(a, b, grad, -0.3, -0.04));
+    const after = continuation(on, sideEdge(a, b, grad, 1.04, 1.3));
+    const excess = (overshoot) => clamp((overshoot - 0.35) / 0.65, 0, 1);
+    const penalty = Math.max(
+      OVERSHOOT_PENALTY_BOTH_ENDS * excess(Math.min(before, after)),
+      OVERSHOOT_PENALTY_ONE_END * excess(Math.max(before, after)),
     );
-    const penalty = 0.8 * clamp((overshoot - 0.35) / 0.65, 0, 1);
     weakest = Math.min(weakest, on.hits * (1 - penalty));
     if (weakest <= MIN_SUPPORT) return weakest; // can't make the cut; skip the rest
   }
@@ -403,30 +506,97 @@ function lineSeparation(a, b) {
 }
 
 /**
- * Candidates from straight lines: works when clutter (grain, cover art
- * touching the border) breaks the outline into pieces that never close
- * into one contour. Long segments are merged into lines, paired into
- * roughly parallel pairs, and two pairs at a clear angle form a quad.
+ * Straight lines in the edge map, most evidence first. A line's evidence
+ * is the summed length of its segments, so a side broken up by a hand or
+ * clutter still ranks by everything visible of it.
  */
-function quadsFromLines(edges, size, track) {
+function detectLines(edges, size, track) {
   const minSide = Math.min(size.width, size.height);
   const segs = track(new cv.Mat());
-  cv.HoughLinesP(edges, segs, 1, Math.PI / 180, 50, minSide * 0.2, 15);
+  cv.HoughLinesP(edges, segs, 1, Math.PI / 180, 50, minSide * 0.12, 15);
   const raw = [];
   for (let i = 0; i < segs.rows; i++) {
     const [x1, y1, x2, y2] = segs.data32S.slice(i * 4, i * 4 + 4);
     raw.push(segmentLine(x1, y1, x2, y2));
   }
   raw.sort((a, b) => b.len - a.len);
-  // Collapse duplicates (one physical edge yields many segments).
+  // Collapse duplicates (one physical edge yields many segments), but
+  // tightly: a frame printed just inside a sleeve is a line of its own.
   const lines = [];
   for (const l of raw) {
-    const dup = lines.some(
-      (m) => angleDiff(l.angle, m.angle) < 0.06 && lineSeparation(l, m) < minSide * 0.02,
+    const same = lines.find(
+      (m) => angleDiff(l.angle, m.angle) < 0.04 && lineSeparation(l, m) < minSide * 0.008,
     );
-    if (!dup) lines.push(l);
-    if (lines.length >= 20) break;
+    if (same) same.evidence += l.len;
+    else lines.push({ ...l, evidence: l.len });
   }
+  return lines.sort((a, b) => b.evidence - a.evidence).slice(0, MAX_LINES);
+}
+
+/**
+ * Where a line runs along an edge, as running hit counts across the whole
+ * frame, so the coverage of any stretch of it costs one subtraction.
+ */
+function lineCoverage(line, grad) {
+  const { width, height, threshold } = grad;
+  const reach = Math.ceil(Math.hypot(width, height));
+  const count = Math.ceil((reach * 2) / COVERAGE_STEP);
+  const hits = new Int32Array(count + 1);
+  const nx = -line.dy;
+  const ny = line.dx;
+  for (let k = 0; k < count; k++) {
+    const t = -reach + k * COVERAGE_STEP;
+    const x = line.px + line.dx * t;
+    const y = line.py + line.dy * t;
+    const inFrame = x >= 0 && y >= 0 && x < width && y < height;
+    const hit = inFrame && edgeResponse(x, y, nx, ny, grad) > threshold;
+    hits[k + 1] = hits[k] + (hit ? 1 : 0);
+  }
+  return { hits, reach, count };
+}
+
+/** Share of the line between points p and q (both on it) that lies on an edge. */
+function spanCoverage(line, p, q) {
+  const { hits, reach, count } = line.coverage;
+  const position = (r) =>
+    ((r.x - line.px) * line.dx + (r.y - line.py) * line.dy + reach) / COVERAGE_STEP;
+  const a = position(p);
+  const b = position(q);
+  // Skip the ends, like sideEdge: corners are often rounded or worn.
+  const from = clamp(Math.round(a + (b - a) * 0.1), 0, count);
+  const to = clamp(Math.round(a + (b - a) * 0.9), 0, count);
+  const samples = Math.abs(to - from);
+  return samples === 0 ? 0 : Math.abs(hits[to] - hits[from]) / samples;
+}
+
+/** Tilted-square test for ordered corners; see the LINE_QUAD_ constants. */
+function plausibleShape(q) {
+  const sides = q.map((p, i) => Math.hypot(q[(i + 1) % 4].x - p.x, q[(i + 1) % 4].y - p.y));
+  if (Math.max(...sides) > Math.min(...sides) * LINE_QUAD_MAX_SIDE_RATIO) return false;
+  return q.every((p, i) => {
+    const a = q[(i + 3) % 4];
+    const b = q[(i + 1) % 4];
+    const cos =
+      ((a.x - p.x) * (b.x - p.x) + (a.y - p.y) * (b.y - p.y)) /
+      (Math.hypot(a.x - p.x, a.y - p.y) * Math.hypot(b.x - p.x, b.y - p.y));
+    const deg = (Math.acos(clamp(cos, -1, 1)) * 180) / Math.PI;
+    return deg >= LINE_QUAD_MIN_CORNER_DEG && deg <= LINE_QUAD_MAX_CORNER_DEG;
+  });
+}
+
+/**
+ * Candidates from straight lines: works when clutter (grain, cover art
+ * touching the border, a busy shelf behind) breaks the outline into
+ * pieces that never close into one contour. Lines are paired into roughly
+ * parallel pairs, and two pairs at a clear angle form a quad. A busy room
+ * makes thousands of those, so each is ranked by how much of its weakest
+ * side lies on an edge (cheap, thanks to lineCoverage) and only the best
+ * go on to full scoring.
+ */
+function quadsFromLines(edges, size, grad, track) {
+  const minSide = Math.min(size.width, size.height);
+  const lines = detectLines(edges, size, track);
+  for (const line of lines) line.coverage = lineCoverage(line, grad);
   const pairs = [];
   for (let i = 0; i < lines.length; i++) {
     for (let j = i + 1; j < lines.length; j++) {
@@ -438,8 +608,9 @@ function quadsFromLines(edges, size, track) {
       }
     }
   }
-  const quads = [];
+  const ranked = [];
   const margin = minSide * 0.03;
+  const minArea = size.width * size.height * MIN_AREA_FRACTION;
   for (let i = 0; i < pairs.length; i++) {
     for (let j = i + 1; j < pairs.length; j++) {
       const [a1, a2] = pairs[i];
@@ -452,11 +623,23 @@ function quadsFromLines(edges, size, track) {
           p.x > -margin && p.y > -margin && p.x < size.width + margin && p.y < size.height + margin,
       );
       if (!inside) continue;
+      const coverage = Math.min(
+        spanCoverage(b1, corners[0], corners[1]),
+        spanCoverage(a2, corners[1], corners[2]),
+        spanCoverage(b2, corners[2], corners[3]),
+        spanCoverage(a1, corners[3], corners[0]),
+      );
+      if (coverage < MIN_LINE_SIDE_COVERAGE) continue;
       const ordered = orderClockwise(corners);
-      if (polygonArea(ordered) >= size.width * size.height * MIN_AREA_FRACTION) quads.push(ordered);
+      const area = polygonArea(ordered);
+      if (area < minArea || !plausibleShape(ordered)) continue;
+      ranked.push({ ordered, rank: coverage ** 3 * area });
     }
   }
-  return quads;
+  return ranked
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, MAX_LINE_QUADS)
+    .map((q) => q.ordered);
 }
 
 /**
@@ -487,9 +670,9 @@ function detectQuads(imageData) {
         quads.push(...quadsFromContour(c, track));
       }
     }
-    quads.push(...quadsFromLines(lineEdges, size, track));
-
     const grad = gradients(src, track);
+    quads.push(...quadsFromLines(lineEdges, size, grad, track));
+
     return quads
       .map((corners) => ({ corners, support: edgeSupport(orderClockwise(corners), grad) }))
       .filter((c) => c.support > MIN_SUPPORT)

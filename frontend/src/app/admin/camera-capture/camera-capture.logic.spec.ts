@@ -24,6 +24,7 @@ import {
   scaleCircle,
   scalePoints,
   squareOutputSize,
+  trueAspect,
 } from './camera-capture.logic';
 
 const frame = { width: 1000, height: 800 };
@@ -195,6 +196,37 @@ describe('loupeSide', () => {
   });
 });
 
+describe('trueAspect', () => {
+  const photo = { width: 3000, height: 2250 };
+  const focal = 2400; // what a typical phone gives this photo
+
+  /** A flat rectangle tilted away from a pinhole camera, as the camera sees it. */
+  function seen(width: number, height: number, tilt: number): Quad {
+    const corners = [
+      [-width / 2, -height / 2],
+      [width / 2, -height / 2],
+      [width / 2, height / 2],
+      [-width / 2, height / 2],
+    ];
+    return corners.map(([x, y]) => {
+      const depth = 5 + y * Math.sin(tilt);
+      return {
+        x: photo.width / 2 + (focal * x) / depth,
+        y: photo.height / 2 + (focal * y * Math.cos(tilt)) / depth,
+      };
+    }) as Quad;
+  }
+
+  it('sees a square as square, however it is tilted', () => {
+    expect(trueAspect(seen(2, 2, 0), photo)).toBeCloseTo(1, 3);
+    expect(trueAspect(seen(2, 2, 0.5), photo)).toBeCloseTo(1, 3);
+  });
+
+  it('tells a tilted rectangle from a square', () => {
+    expect(trueAspect(seen(2.4, 2, 0.5), photo)).toBeCloseTo(1.2, 3);
+  });
+});
+
 describe('clampCircle', () => {
   it('pulls a circle back inside the frame', () => {
     expect(clampCircle({ cx: 990, cy: 10, r: 100 }, frame)).toEqual({ cx: 900, cy: 100, r: 100 });
@@ -283,6 +315,30 @@ describe('pickSleeveQuad', () => {
       [
         { corners: printedFrame, support: 1 },
         { corners: square, support: 0.6 },
+      ],
+      frame,
+    );
+    expect(picked).toEqual(square);
+  });
+
+  it('prefers the sleeve over a frame printed along only some of its sides', () => {
+    const frameAtBottom: Quad = [square[0], square[1], { x: 700, y: 640 }, { x: 100, y: 640 }];
+    const picked = pickSleeveQuad(
+      [
+        { corners: frameAtBottom, support: 1 },
+        { corners: square, support: 0.7 },
+      ],
+      frame,
+    );
+    expect(picked).toEqual(square);
+  });
+
+  it('does not swap the sleeve for an outline tilted out along a crease', () => {
+    const topOnCrease: Quad = [{ x: 100, y: 60 }, square[1], square[2], square[3]];
+    const picked = pickSleeveQuad(
+      [
+        { corners: square, support: 1 },
+        { corners: topOnCrease, support: 0.8 },
       ],
       frame,
     );

@@ -100,13 +100,6 @@ export function quadArea(quad: Quad): number {
   return Math.abs(sum) / 2;
 }
 
-function sideMidpoints(quad: Quad): Point[] {
-  return quad.map((p, i) => {
-    const q = quad[(i + 1) % 4];
-    return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
-  });
-}
-
 function sides(quad: Quad): number[] {
   return quad.map((p, i) => distance(p, quad[(i + 1) % 4]));
 }
@@ -161,6 +154,41 @@ export function isPlausibleSleeveQuad(quad: Quad, frame: Size): boolean {
   });
 }
 
+/** A phone's main camera: focal length as a share of the image's longer edge. */
+const TYPICAL_FOCAL_FRACTION = 0.8;
+
+/**
+ * Width / height of the rectangle an ordered quad shows, with the camera's
+ * perspective undone (Zhang & He, "Whiteboard scanning"). Comparing side
+ * lengths can't tell a tilted square from a rectangle; this can.
+ * Assumes the principal point at the image center and a typical focal
+ * length; a sleeve comes out near 1 without either being exact.
+ */
+export function trueAspect(quad: Quad, frame: Size): number {
+  const focal = Math.max(frame.width, frame.height) * TYPICAL_FOCAL_FRACTION;
+  const [tl, tr, br, bl] = quad.map((p): Vec3 => [
+    p.x - frame.width / 2,
+    p.y - frame.height / 2,
+    1,
+  ]);
+  const k2 = dot(cross(tl, br), bl) / dot(cross(tr, br), bl);
+  const k3 = dot(cross(tl, br), tr) / dot(cross(bl, br), tr);
+  const across = tr.map((v, i) => k2 * v - tl[i]) as Vec3;
+  const down = bl.map((v, i) => k3 * v - tl[i]) as Vec3;
+  const length = ([x, y, z]: Vec3) => (x * x + y * y) / (focal * focal) + z * z;
+  return Math.sqrt(length(across) / length(down));
+}
+
+type Vec3 = [number, number, number];
+
+function dot(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
 /** Scales a quad about its centroid (1.03 = 3% bigger). */
 export function expandQuad(quad: Quad, factor: number): Quad {
   const c = centroid(quad);
@@ -200,21 +228,36 @@ interface SleeveCandidate {
 
 /** Corners closer than this share of the frame diagonal count as the same outline. */
 const AGREE_TOLERANCE_FRACTION = 0.03;
+/** Tighter, for what gets averaged: a frame printed near the edge mustn't pull it in. */
+const AVERAGE_TOLERANCE_FRACTION = 0.008;
 /** Score boost per agreeing candidate, capped at MAX_AGREEING_PEERS. */
 const AGREEMENT_BONUS = 0.25;
-const MAX_AGREEING_PEERS = 4;
+const MAX_AGREEING_PEERS = 1;
 // An enclosing outline replaces the winner (see enclosingSleeve) only if
-// it is well supported, somewhat but not much bigger, and differs on
-// every side.
-const ENCLOSING_MIN_SUPPORT = 0.55;
-const ENCLOSING_MIN_AREA_RATIO = 1.05;
+// it is well supported, somewhat but not much bigger, and no less square.
+const ENCLOSING_MIN_SUPPORT = 0.6;
+const ENCLOSING_MIN_AREA_RATIO = 1.02;
 const ENCLOSING_MAX_AREA_RATIO = 1.7;
 const ENCLOSING_SLACK = 1.03;
-const ENCLOSING_MIN_SIDE_GAP = 1 / 3; // of the agree tolerance
+const ENCLOSING_SQUARENESS_LOSS = 0.1;
+const ENCLOSING_MAX_SIDE_TURN_DEG = 2;
+/**
+ * How strictly a candidate must be square once perspective is undone.
+ * Record sleeves are, so this is what tells the sleeve from the rectangle
+ * left when one side lands on a line printed inside the cover.
+ */
+const SQUARENESS_SIGMA = 0.06;
 
 /** Edge support dominates both the score and the corner average. */
 function supportWeight(support: number): number {
   return support ** 3;
+}
+
+/** 1 for a true square, falling off as the undistorted shape strays from one. */
+function squareness(quad: Quad, frame: Size): number {
+  const aspect = trueAspect(quad, frame);
+  const off = Math.max(aspect, 1 / aspect) - 1;
+  return Math.exp(-(off * off) / (2 * SQUARENESS_SIGMA * SQUARENESS_SIGMA));
 }
 
 /**
@@ -233,13 +276,14 @@ export function pickSleeveQuad(candidates: QuadCandidate[], frame: Size): Quad |
     .filter((c) => isPlausibleSleeveQuad(c.quad, frame));
   if (plausible.length === 0) return null;
 
-  const tolerance = Math.hypot(frame.width, frame.height) * AGREE_TOLERANCE_FRACTION;
-  const clusterOf = (quad: Quad) =>
+  const diagonal = Math.hypot(frame.width, frame.height);
+  const within = (quad: Quad, tolerance: number) =>
     plausible.filter((c) => quad.every((p, i) => distance(p, c.quad[i]) < tolerance));
 
+  const clusterOf = (quad: Quad) => within(quad, diagonal * AGREE_TOLERANCE_FRACTION);
   const winner = bestScoring(plausible, frame, clusterOf);
-  const sleeve = enclosingSleeve(winner, plausible, tolerance) ?? winner;
-  return weightedMean(clusterOf(sleeve));
+  const sleeve = enclosingSleeve(winner, plausible, frame) ?? winner;
+  return weightedMean(within(sleeve, diagonal * AVERAGE_TOLERANCE_FRACTION));
 }
 
 function bestScoring(
@@ -250,13 +294,17 @@ function bestScoring(
   const diag = Math.hypot(frame.width, frame.height);
   const center = { x: frame.width / 2, y: frame.height / 2 };
   const score = ({ quad, support }: SleeveCandidate) => {
-    const s = sides(quad);
-    const squareness = Math.min(...s) / Math.max(...s);
     const centrality = 1 - distance(centroid(quad), center) / diag;
     const areaFraction = quadArea(quad) / (frame.width * frame.height);
     const peers = Math.min(clusterOf(quad).length - 1, MAX_AGREEING_PEERS);
     const agreement = 1 + AGREEMENT_BONUS * peers;
-    return supportWeight(support) * agreement * areaFraction * squareness * centrality;
+    return (
+      supportWeight(support) *
+      agreement *
+      Math.sqrt(areaFraction) *
+      squareness(quad, frame) *
+      centrality
+    );
   };
   let best = candidates[0];
   let bestScore = -Infinity;
@@ -272,19 +320,17 @@ function bestScoring(
 
 /**
  * Many covers print a frame or border inside the sleeve, which has a
- * perfect edge and wins on score. If a well-supported candidate surrounds
- * the winner on all four sides (give or take a few pixels) and isn't much
- * bigger, that's the real sleeve. All four matters: an outline sharing
- * three sides with the winner and pushing the fourth out to a grain line
- * or table edge is the sleeve plus clutter.
+ * perfect edge and wins on score, with all four sides or just some of
+ * them. If a well-supported candidate surrounds the winner (give or take
+ * a few pixels), isn't much bigger and is just as square, that's the real
+ * sleeve; the biggest such one, to get past every printed line. Two things
+ * keep this honest: pushing a side out to a grain line or table edge makes
+ * the outline a rectangle, and a printed frame runs parallel to the sleeve's
+ * edge where a crease or a shelf behind it rarely does.
  */
-function enclosingSleeve(
-  winner: Quad,
-  candidates: SleeveCandidate[],
-  tolerance: number,
-): Quad | null {
+function enclosingSleeve(winner: Quad, candidates: SleeveCandidate[], frame: Size): Quad | null {
   const winnerArea = quadArea(winner);
-  const winnerMids = sideMidpoints(winner);
+  const winnerSquareness = squareness(winner, frame);
   const encloses = ({ quad, support }: SleeveCandidate) => {
     const area = quadArea(quad);
     const slack = expandQuad(quad, ENCLOSING_SLACK);
@@ -293,15 +339,25 @@ function enclosingSleeve(
       area > winnerArea * ENCLOSING_MIN_AREA_RATIO &&
       area < winnerArea * ENCLOSING_MAX_AREA_RATIO &&
       winner.every((p) => pointInQuad(p, slack)) &&
-      sideMidpoints(quad).every(
-        (m, i) => distance(m, winnerMids[i]) > tolerance * ENCLOSING_MIN_SIDE_GAP,
-      )
+      sidesParallel(quad, winner) &&
+      squareness(quad, frame) >= winnerSquareness - ENCLOSING_SQUARENESS_LOSS
     );
   };
-  const [best] = candidates
-    .filter(encloses)
-    .sort((a, b) => b.support - a.support || quadArea(b.quad) - quadArea(a.quad));
+  const [best] = candidates.filter(encloses).sort((a, b) => quadArea(b.quad) - quadArea(a.quad));
   return best?.quad ?? null;
+}
+
+/** Whether each side of `a` runs along the same side of `b`, within ENCLOSING_MAX_SIDE_TURN_DEG. */
+function sidesParallel(a: Quad, b: Quad): boolean {
+  const direction = (q: Quad, i: number) => {
+    const next = q[(i + 1) % 4];
+    return Math.atan2(next.y - q[i].y, next.x - q[i].x);
+  };
+  return [0, 1, 2, 3].every((i) => {
+    const turn = Math.abs(direction(a, i) - direction(b, i)) % (2 * Math.PI);
+    const degrees = (Math.min(turn, 2 * Math.PI - turn) * 180) / Math.PI;
+    return degrees <= ENCLOSING_MAX_SIDE_TURN_DEG;
+  });
 }
 
 /** Support-weighted corner mean, so a sloppy near-duplicate barely shifts the corners. */
