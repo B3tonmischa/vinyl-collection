@@ -38,7 +38,11 @@
 
     @if (vinyl.tracks.length > 0) {
       <section class="mt-8">
-        <app-tracklist [tracks]="vinyl.tracks" [albumArtists]="vinyl.artists" />
+        <app-tracklist
+          [tracks]="vinyl.tracks"
+          [albumArtists]="vinyl.artists"
+          [releaseType]="vinyl.releaseType"
+        />
       </section>
     }
   </div>

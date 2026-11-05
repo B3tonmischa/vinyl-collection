@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { Artist, Track } from '../../models/vinyl.model';
+import { Artist, ReleaseType, Track } from '../../models/vinyl.model';
+import { showsTrackArtists } from './tracklist.logic';
 
 interface SideGroup {
   side: string;
   tracks: Track[];
 }
 
-/** Tracklist grouped by side; each track shows its effectiveArtists when they differ from the album's. */
+/** Tracklist grouped by side; `showsTrackArtists` decides which tracks show their effectiveArtists. */
 @Component({
   selector: 'app-tracklist',
   templateUrl: './tracklist.html',
@@ -15,6 +16,7 @@ interface SideGroup {
 export class TracklistComponent {
   @Input({ required: true }) tracks!: Track[];
   @Input({ required: true }) albumArtists!: Artist[];
+  @Input() releaseType: ReleaseType | null = null;
 
   protected get sides(): SideGroup[] {
     const groups = new Map<string, Track[]>();
@@ -35,10 +37,8 @@ export class TracklistComponent {
       }));
   }
 
-  protected differsFromAlbum(track: Track): boolean {
-    const albumIds = new Set(this.albumArtists.map((a) => a.id));
-    if (track.effectiveArtists.length !== albumIds.size) return true;
-    return track.effectiveArtists.some((a) => !albumIds.has(a.id));
+  protected showsArtists(track: Track): boolean {
+    return showsTrackArtists(track.effectiveArtists, this.albumArtists, this.releaseType);
   }
 
   protected artistNames(artists: Artist[]): string {
