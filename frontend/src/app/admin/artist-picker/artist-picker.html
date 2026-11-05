@@ -17,6 +17,7 @@
   <app-combobox
     placeholder="Add an artist…"
     [options]="options"
+    [existingLabels]="existingNames"
     [loading]="searchResource.isLoading()"
     (queryChange)="onQueryChange($event)"
     (optionSelected)="onOptionSelected($event)"
