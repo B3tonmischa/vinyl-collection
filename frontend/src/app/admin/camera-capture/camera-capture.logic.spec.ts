@@ -25,6 +25,7 @@ import {
   scalePoints,
   squareOutputSize,
   trueAspect,
+  steadyDisc,
 } from './camera-capture.logic';
 
 const frame = { width: 1000, height: 800 };
@@ -395,5 +396,33 @@ describe('SVG overlay helpers', () => {
     expect(circleMaskPath({ cx: 500, cy: 400, r: 100 }, frame)).toBe(
       'M0 0H1000V800H0Z M400 400a100 100 0 1 0 200 0a100 100 0 1 0 -200 0Z',
     );
+  });
+});
+
+describe('steadyDisc', () => {
+  const shown = { cx: 200, cy: 200, r: 100 };
+
+  it('shows the first detection as it is', () => {
+    expect(steadyDisc(null, shown)).toEqual({ shown, pending: null });
+  });
+
+  it('eases through small differences', () => {
+    const next = steadyDisc({ shown, pending: null }, { cx: 204, cy: 200, r: 100 });
+    expect(next.shown.cx).toBeGreaterThan(200);
+    expect(next.shown.cx).toBeLessThan(204);
+  });
+
+  it('ignores one odd frame', () => {
+    const odd = steadyDisc({ shown, pending: null }, { cx: 300, cy: 240, r: 130 });
+    expect(odd.shown).toEqual(shown);
+    const after = steadyDisc(odd, { cx: 201, cy: 200, r: 100 });
+    expect(after.pending).toBeNull();
+    expect(Math.abs(after.shown.cx - 200)).toBeLessThan(1);
+  });
+
+  it('follows a record that really moved, once a second frame agrees', () => {
+    const moved = { cx: 300, cy: 240, r: 100 };
+    const first = steadyDisc({ shown, pending: null }, moved);
+    expect(steadyDisc(first, { ...moved, cx: 302 }).shown).toEqual({ ...moved, cx: 302 });
   });
 });
