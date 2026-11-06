@@ -18,6 +18,7 @@ import {
   LIVE_DETECT_MAX_EDGE,
   Point,
   Quad,
+  SteadyDisc,
   Size,
   circleMaskPath,
   clampCircle,
@@ -32,6 +33,7 @@ import {
   scaleCircle,
   scalePoints,
   squareOutputSize,
+  steadyDisc,
 } from './camera-capture.logic';
 import {
   canvasSize,
@@ -44,6 +46,7 @@ import {
   imageDataToJpegFile,
   toWorkingCanvas,
 } from './camera-crop';
+import { DiscDetector } from './disc-detector';
 import { OpenCvScanDetector } from './scan-detector';
 import { REFINE_BAND_DETECTION_PX, refineSleeveQuad } from './sleeve-refine';
 import {
@@ -108,7 +111,7 @@ function refineSleeve(canvas: HTMLCanvasElement, quad: Quad): Quad {
  * image-upload-panel. A guided session starts on a setup screen
  * (ScanSetup) and shows a progress strip of all its steps (tap one to
  * jump). Flow per step: live viewfinder (with a square or circle guide
- * and, once OpenCV is loaded, the live detection drawn on top) → still
+ * and, once a detector is ready, the live detection drawn on top) → still
  * photo with an auto-detected, draggable crop → cropped File handed to
  * data.onCapture for upload. Sleeves get perspective-corrected to a
  * square JPEG; discs are cut round into a PNG with transparent corners.
@@ -165,6 +168,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   protected readonly data = inject<CameraCaptureData>(DIALOG_DATA);
   private readonly dialogRef = inject(DialogRef<void>);
   private readonly detector = inject(OpenCvScanDetector);
+  private readonly discDetector = inject(DiscDetector);
 
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
   private readonly still = viewChild.required<ElementRef<HTMLCanvasElement>>('still');
@@ -245,6 +249,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   private liveTimer: ReturnType<typeof setInterval> | null = null;
   private liveBusy = false;
   private liveMisses = 0;
+  private steady: SteadyDisc | null = null;
   private dragging: DragHandle | null = null;
   private grabOffset: Point = { x: 0, y: 0 };
 
@@ -333,7 +338,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
     this.stream = null;
   }
 
-  /** Draws what OpenCV currently sees, so the user knows when to shoot. */
+  /** Draws what the detectors currently see, so the user knows when to shoot. */
   private async liveDetect(): Promise<void> {
     const size = this.videoSize();
     const step = this.step();
@@ -344,18 +349,21 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
       if (step.mode === 'sleeve') {
         this.showLive(this.liveQuad, await this.detectSleeve(image, size));
       } else {
-        this.showLive(this.liveCircle, await this.detectDisc(image, size));
+        const found = await this.detectDisc(image, size);
+        this.steady = found ? steadyDisc(this.steady, found) : this.steady;
+        this.showLive(this.liveCircle, found && this.steady?.shown);
       }
     } finally {
       this.liveBusy = false;
     }
   }
 
-  private showLive<T>(target: WritableSignal<T | null>, found: T | null): void {
+  private showLive<T>(target: WritableSignal<T | null>, found: T | null | undefined): void {
     if (found) {
       this.liveMisses = 0;
       target.set(found);
     } else if (++this.liveMisses > LIVE_MISSES_BEFORE_CLEAR) {
+      this.steady = null;
       target.set(null);
     }
   }
@@ -371,7 +379,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   /** The record's circle in `target` pixel space, or null. */
   private async detectDisc(image: ImageData, target: Size): Promise<Circle | null> {
     const detSize = { width: image.width, height: image.height };
-    const circle = await this.detector.detectCircle(image);
+    const circle = await this.discDetector.detect(image);
     return circle ? scaleCircle(circle, detSize, target) : null;
   }
 
@@ -522,6 +530,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
     this.liveQuad.set(null);
     this.liveCircle.set(null);
     this.liveMisses = 0;
+    this.steady = null;
     this.phase.set('viewfinder');
     if (this.stream) void this.resumeVideo();
     else void this.startCamera();

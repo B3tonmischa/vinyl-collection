@@ -24,7 +24,7 @@ Then open `https://<this-pc's-LAN-IP>:4200/` on the phone and accept the self-si
 
 On Android there's a zero-certificate alternative: connect the phone over USB, open `chrome://inspect#devices` on the PC, add port forwarding `4200 → localhost:4200` (and `3000 → localhost:3000`), and browse to `http://localhost:4200` on the phone with the normal `npm start`.
 
-Auto-crop uses a self-hosted OpenCV.js (`public/vendor/opencv/`, about 10 MB). It is only downloaded the first time the camera opens. If it can't load, the camera still works and falls back to the guide frame plus manual adjustment.
+Sleeve auto-crop uses a self-hosted OpenCV.js (`public/vendor/opencv/`, about 10 MB). It is only downloaded the first time the camera opens. If it can't load, the camera still works and falls back to the guide frame plus manual adjustment. Finding a record doesn't need OpenCV: that's plain TypeScript in `disc-detect.ts`, running in its own worker.
 
 ## Code scaffolding
 

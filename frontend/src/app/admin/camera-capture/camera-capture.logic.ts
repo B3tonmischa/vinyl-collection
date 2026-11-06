@@ -411,6 +411,44 @@ export function clampCircle(circle: Circle, frame: Size, minRadius = 20): Circle
   };
 }
 
+/** Live detections further from the shown circle than this, as a share of its radius, are a jump. */
+const STEADY_JUMP = 0.08;
+/** How far the shown circle moves towards a detection that agrees with it. */
+const STEADY_EASE = 0.35;
+
+/** The circle shown in the viewfinder, and a jump waiting for a second opinion. */
+export interface SteadyDisc {
+  shown: Circle;
+  pending: Circle | null;
+}
+
+function circlesAgree(a: Circle, b: Circle): boolean {
+  const limit = a.r * STEADY_JUMP;
+  return Math.hypot(a.cx - b.cx, a.cy - b.cy) <= limit && Math.abs(a.r - b.r) <= limit;
+}
+
+/**
+ * Keeps the live circle calm. Detections are a few pixels apart from frame to
+ * frame, which the shown circle eases through. A real jump (the record moved)
+ * shows up twice running; one odd frame doesn't, and is ignored.
+ */
+export function steadyDisc(state: SteadyDisc | null, found: Circle): SteadyDisc {
+  if (!state) return { shown: found, pending: null };
+  if (circlesAgree(state.shown, found)) {
+    const ease = (from: number, to: number) => from + (to - from) * STEADY_EASE;
+    return {
+      shown: {
+        cx: ease(state.shown.cx, found.cx),
+        cy: ease(state.shown.cy, found.cy),
+        r: ease(state.shown.r, found.r),
+      },
+      pending: null,
+    };
+  }
+  if (state.pending && circlesAgree(state.pending, found)) return { shown: found, pending: null };
+  return { shown: state.shown, pending: found };
+}
+
 /** Square output edge for a disc crop. */
 export function discOutputSize(circle: Circle, maxEdge = OUTPUT_MAX_EDGE): number {
   return Math.max(1, Math.round(Math.min(maxEdge, circle.r * 2)));
