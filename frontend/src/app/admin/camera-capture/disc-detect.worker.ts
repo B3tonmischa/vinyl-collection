@@ -1,16 +1,24 @@
 /// <reference lib="webworker" />
-// Runs detectDisc off the main thread, so the viewfinder stays smooth.
-// Wrapped by disc-detector.ts.
+// Finds and straightens records off the main thread, so the viewfinder stays
+// smooth. Wrapped by disc-detector.ts.
 
-import { Circle } from './camera-capture.logic';
-import { DiscReply, DiscRequest, detectDisc } from './disc-detect';
+import { findDisc } from './disc-detect';
+import type { DiscReply, DiscRequest } from './disc-detector';
+import { warpImage } from './disc-straighten';
 
 addEventListener('message', ({ data }: MessageEvent<DiscRequest>) => {
-  let circle: Circle | null = null;
+  let result: DiscReply['result'] = null;
+  const transfer: Transferable[] = [];
   try {
-    circle = detectDisc(data.image);
+    if (data.type === 'find') {
+      result = findDisc(data.image);
+    } else {
+      const pixels = warpImage(data.image, data.toPhoto, data.size);
+      result = new ImageData(pixels, data.size, data.size);
+      transfer.push(pixels.buffer);
+    }
   } catch (err) {
-    console.error('Disc detection failed', err);
+    console.error(`Disc ${data.type} failed`, err);
   }
-  postMessage({ id: data.id, circle } satisfies DiscReply);
+  postMessage({ id: data.id, result } satisfies DiscReply, transfer);
 });
