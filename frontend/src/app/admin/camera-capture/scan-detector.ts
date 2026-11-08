@@ -1,11 +1,10 @@
 import { Service } from '@angular/core';
-import { Circle, Quad, QuadCandidate } from './camera-capture.logic';
+import { Quad, QuadCandidate } from './camera-capture.logic';
 
 /** Requests understood by public/workers/scan-worker.js (the reply carries the same id). */
 type ScanRequest =
   | { type: 'init' }
   | { type: 'detectQuads'; image: ImageData }
-  | { type: 'detectCircle'; image: ImageData }
   | { type: 'warp'; image: ImageData; quad: Quad; size: number };
 
 type ScanReply = { id: number; result?: unknown; error?: string };
@@ -16,7 +15,7 @@ const INIT_TIMEOUT_MS = 90_000;
 // Files in public/ aren't content-hashed, so browsers (and phones) keep
 // serving a stale worker after a deploy. Bump this whenever
 // scan-worker.js changes its protocol or behavior.
-const WORKER_VERSION = 3;
+const WORKER_VERSION = 4;
 
 /**
  * What the camera dialog needs from OpenCV, run in
@@ -45,10 +44,6 @@ export class OpenCvScanDetector {
   /** Possible sleeve outlines, for pickSleeveQuad() to choose from. */
   detectQuads(image: ImageData): Promise<QuadCandidate[] | null> {
     return this.request({ type: 'detectQuads', image }, [image.data.buffer]);
-  }
-
-  detectCircle(image: ImageData): Promise<Circle | null> {
-    return this.request({ type: 'detectCircle', image }, [image.data.buffer]);
   }
 
   /** Perspective-warps an ordered quad to a size×size square. */

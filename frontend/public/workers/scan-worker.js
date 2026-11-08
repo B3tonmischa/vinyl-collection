@@ -1,5 +1,6 @@
 /*
- * Classic (non-module) web worker for camera-capture auto-crop. Lives in
+ * Classic (non-module) web worker for sleeve auto-crop and warping (records
+ * have their own, src/app/admin/camera-capture/disc-detect.ts). Lives in
  * public/ rather than src/ because it has to `importScripts` the
  * self-hosted public/vendor/opencv/opencv.js — module workers can't do
  * that, and keeping it out of the Angular build avoids wiring a worker
@@ -681,183 +682,6 @@ function detectQuads(imageData) {
   });
 }
 
-/*
- * Disc detection. HoughCircles alone proposes plenty of circles in a busy
- * room, and the biggest is usually a table edge running off the photo. So
- * it only proposes: each proposal is scored by how much of its rim really
- * lies on an edge, then the best is fitted onto that edge.
- */
-
-/**
- * Longest edge discs are judged at. More detail doesn't help a rim that big
- * and only gives creases in a bedsheet a chance.
- */
-const CIRCLE_WORK_EDGE = 560;
-/** Longest edge the circle search runs at; the rim fit restores the precision. */
-const CIRCLE_SEARCH_EDGE = 360;
-/** Proposals scored per photo, and how many of the best get the (slower) rim fit. */
-const MAX_CIRCLE_PROPOSALS = 30;
-const MAX_CIRCLE_FITS = 4;
-/** Rim fits per proposal: each can walk a further step onto the real rim. */
-const RIM_FIT_ROUNDS = 2;
-const RIM_SAMPLES = 72;
-/** Least share of the rim on an edge for a circle to count as a record. */
-const MIN_RIM_SUPPORT = 0.4;
-/** How far a record may stick out of the photo, as a share of its radius. */
-const MAX_RIM_OVERHANG = 0.04;
-/** How far the rim fit looks either side of the circle, as a share of its radius. */
-const RIM_SEARCH_FRACTION = 0.08;
-/** Rim points further than this from the fitted circle are ignored, in pixels. */
-const RIM_INLIER_DISTANCE = 2.5;
-
-/** Whether `c` lies in the frame, give or take MAX_RIM_OVERHANG. */
-function circleInFrame(c, width, height) {
-  const slack = c.r * MAX_RIM_OVERHANG;
-  return (
-    c.cx - c.r >= -slack &&
-    c.cy - c.r >= -slack &&
-    c.cx + c.r <= width + slack &&
-    c.cy + c.r <= height + slack
-  );
-}
-
-/** Share of the circle's rim that lies on an edge running along it. */
-function rimSupport(c, grad) {
-  let hits = 0;
-  for (let k = 0; k < RIM_SAMPLES; k++) {
-    const a = (k * 2 * Math.PI) / RIM_SAMPLES;
-    const nx = Math.cos(a);
-    const ny = Math.sin(a);
-    if (edgeResponse(c.cx + nx * c.r, c.cy + ny * c.r, nx, ny, grad) > grad.threshold) hits++;
-  }
-  return hits / RIM_SAMPLES;
-}
-
-/** Least-squares circle through the points (Kåsa), or null if they're degenerate. */
-function fitCircle(points) {
-  const mx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
-  const my = points.reduce((sum, p) => sum + p.y, 0) / points.length;
-  let suu = 0;
-  let svv = 0;
-  let suv = 0;
-  let suuu = 0;
-  let svvv = 0;
-  let suvv = 0;
-  let svuu = 0;
-  for (const p of points) {
-    const u = p.x - mx;
-    const v = p.y - my;
-    suu += u * u;
-    svv += v * v;
-    suv += u * v;
-    suuu += u * u * u;
-    svvv += v * v * v;
-    suvv += u * v * v;
-    svuu += v * u * u;
-  }
-  const det = suu * svv - suv * suv;
-  if (Math.abs(det) < 1e-6) return null;
-  const rhsU = (suuu + suvv) / 2;
-  const rhsV = (svvv + svuu) / 2;
-  const uc = (rhsU * svv - rhsV * suv) / det;
-  const vc = (rhsV * suu - rhsU * suv) / det;
-  const r = Math.sqrt(uc * uc + vc * vc + (suu + svv) / points.length);
-  return { cx: mx + uc, cy: my + vc, r };
-}
-
-/** Moves a circle onto the strongest edge near its rim, ignoring stray points. */
-function fitRim(circle, grad) {
-  const band = Math.ceil(circle.r * RIM_SEARCH_FRACTION);
-  const points = [];
-  for (let k = 0; k < RIM_SAMPLES; k++) {
-    const a = (k * 2 * Math.PI) / RIM_SAMPLES;
-    const nx = Math.cos(a);
-    const ny = Math.sin(a);
-    let best = grad.threshold;
-    let found = null;
-    for (let o = -band; o <= band; o++) {
-      const x = circle.cx + nx * (circle.r + o);
-      const y = circle.cy + ny * (circle.r + o);
-      const g = edgeResponse(x, y, nx, ny, grad);
-      if (g > best) {
-        best = g;
-        found = { x, y };
-      }
-    }
-    if (found) points.push(found);
-  }
-  let kept = points;
-  let fitted = circle;
-  for (let pass = 0; pass < 3 && kept.length >= 6; pass++) {
-    const next = fitCircle(kept);
-    if (!next) return circle;
-    fitted = next;
-    kept = points.filter(
-      (p) =>
-        Math.abs(Math.hypot(p.x - fitted.cx, p.y - fitted.cy) - fitted.r) <= RIM_INLIER_DISTANCE,
-    );
-  }
-  return fitted;
-}
-
-/** The record's circle, or null if nothing has enough of a rim. */
-function detectCircle(imageData) {
-  return withMats((track) => {
-    const full = track(cv.matFromImageData(imageData));
-    const down = Math.min(1, CIRCLE_WORK_EDGE / Math.max(full.cols, full.rows));
-    const src = track(new cv.Mat());
-    cv.resize(full, src, new cv.Size(0, 0), down, down, cv.INTER_AREA);
-    const width = src.cols;
-    const height = src.rows;
-    const scale = Math.min(1, CIRCLE_SEARCH_EDGE / Math.max(width, height));
-    const gray = track(new cv.Mat());
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    const small = track(new cv.Mat());
-    cv.resize(gray, small, new cv.Size(0, 0), scale, scale, cv.INTER_AREA);
-    cv.medianBlur(small, small, 5);
-    const minSide = Math.min(small.cols, small.rows);
-    const proposals = track(new cv.Mat());
-    cv.HoughCircles(
-      small,
-      proposals,
-      cv.HOUGH_GRADIENT,
-      1,
-      minSide * 0.05,
-      60,
-      25,
-      Math.round(minSide * 0.2),
-      Math.round(minSide * 0.55),
-    );
-    const grad = gradients(src, track);
-    const count = Math.min(proposals.cols, MAX_CIRCLE_PROPOSALS);
-    const ranked = [];
-    for (let i = 0; i < count; i++) {
-      const circle = {
-        cx: proposals.data32F[i * 3] / scale,
-        cy: proposals.data32F[i * 3 + 1] / scale,
-        r: proposals.data32F[i * 3 + 2] / scale,
-      };
-      ranked.push({ circle, support: rimSupport(circle, grad) });
-    }
-    ranked.sort((a, b) => b.support - a.support);
-    let best = null;
-    let bestScore = 0;
-    for (const { circle } of ranked.slice(0, MAX_CIRCLE_FITS)) {
-      let fitted = circle;
-      for (let round = 0; round < RIM_FIT_ROUNDS; round++) fitted = fitRim(fitted, grad);
-      if (!circleInFrame(fitted, width, height)) continue;
-      const support = rimSupport(fitted, grad);
-      if (support < MIN_RIM_SUPPORT) continue;
-      const score = (support * fitted.r) ** 2;
-      if (score > bestScore) {
-        best = fitted;
-        bestScore = score;
-      }
-    }
-    return best && { cx: best.cx / down, cy: best.cy / down, r: best.r / down };
-  });
-}
-
 /** Perspective-warps `quad` (TL, TR, BR, BL) to a size×size square. */
 function warp(imageData, quad, size) {
   return withMats((track) => {
@@ -893,7 +717,6 @@ self.onmessage = async (event) => {
     let result;
     if (type === 'init') result = true;
     else if (type === 'detectQuads') result = detectQuads(event.data.image);
-    else if (type === 'detectCircle') result = detectCircle(event.data.image);
     else if (type === 'warp') result = warp(event.data.image, event.data.quad, event.data.size);
     else throw new Error(`Unknown request type: ${type}`);
     const transfer = result instanceof ImageData ? [result.data.buffer] : [];
