@@ -4,7 +4,10 @@ import {
   addArtist,
   createEmptyTrackRow,
   displayedArtists,
+  knownSides,
+  nextSide,
   resetToInherit,
+  sideForNewRow,
   toggleArtist,
   trackRowToPayload,
 } from './track-list-editor.logic';
@@ -141,5 +144,63 @@ describe('trackRowToPayload', () => {
     const row = { ...createEmptyTrackRow(1), side: '   ' };
     const payload = trackRowToPayload(row);
     expect(payload.side).toBeNull();
+  });
+});
+
+const rowsWithSides = (...sides: string[]) => sides.map((side) => ({ side }));
+
+describe('createEmptyTrackRow side', () => {
+  it('starts on the given side', () => {
+    expect(createEmptyTrackRow(3, 'C').side).toBe('C');
+  });
+});
+
+describe('knownSides', () => {
+  it('always offers A and B', () => {
+    expect(knownSides([])).toEqual(['A', 'B']);
+  });
+
+  it('adds the sides rows use and the added ones, without blanks or duplicates', () => {
+    expect(knownSides(rowsWithSides('A', ' D ', '', 'C'), ['E', 'C'])).toEqual([
+      'A',
+      'B',
+      'C',
+      'D',
+      'E',
+    ]);
+  });
+
+  it('keeps odd values so their rows are not blanked, after the letters', () => {
+    expect(knownSides(rowsWithSides('AA', 'B'))).toEqual(['A', 'B', 'AA']);
+  });
+});
+
+describe('nextSide', () => {
+  it('is the letter after the last single-letter side', () => {
+    expect(nextSide(['A', 'B'])).toBe('C');
+    expect(nextSide(['A', 'B', 'AA', 'D'])).toBe('E');
+  });
+
+  it('starts at A when there are no letters', () => {
+    expect(nextSide([])).toBe('A');
+  });
+
+  it('is null once Z is taken', () => {
+    expect(nextSide(['Z'])).toBeNull();
+  });
+});
+
+describe('sideForNewRow', () => {
+  it('prefers the side last picked on any row', () => {
+    expect(sideForNewRow('B', rowsWithSides('A', 'C'), ['A', 'B', 'C'])).toBe('B');
+  });
+
+  it("falls back to the last row's side", () => {
+    expect(sideForNewRow(null, rowsWithSides('A', 'C'), ['A', 'B', 'C'])).toBe('C');
+  });
+
+  it('falls back to the first side for an empty or side-less tracklist', () => {
+    expect(sideForNewRow(null, [], ['A', 'B'])).toBe('A');
+    expect(sideForNewRow(null, rowsWithSides(''), ['A', 'B'])).toBe('A');
   });
 });

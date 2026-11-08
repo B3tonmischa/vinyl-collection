@@ -20,16 +20,62 @@ export interface TrackFormRow {
   overrideArtists: Artist[];
 }
 
-export function createEmptyTrackRow(position: number): TrackFormRow {
+export function createEmptyTrackRow(position: number, side = ''): TrackFormRow {
   return {
     key: crypto.randomUUID(),
     serverId: null,
     position,
     title: '',
-    side: '',
+    side,
     dirty: false,
     overrideArtists: [],
   };
+}
+
+/** Every release has at least these two sides on offer. */
+export const DEFAULT_SIDES: readonly string[] = ['A', 'B'];
+
+/**
+ * The sides the dropdowns offer: A and B, every side a row already uses
+ * (so an odd legacy value like "AA" is never blanked), and the ones added
+ * with the "add side" button. Single letters first, then alphabetically.
+ */
+export function knownSides(
+  rows: readonly Pick<TrackFormRow, 'side'>[],
+  addedSides: readonly string[] = [],
+): string[] {
+  const sides = new Set<string>(DEFAULT_SIDES);
+  for (const side of [...rows.map((r) => r.side), ...addedSides]) {
+    const trimmed = side.trim();
+    if (trimmed) sides.add(trimmed);
+  }
+  return [...sides].sort((a, b) => a.length - b.length || a.localeCompare(b));
+}
+
+/**
+ * The side the "add side" button adds: the letter after the last
+ * single-letter side, or null once Z is taken.
+ */
+export function nextSide(sides: readonly string[]): string | null {
+  const codes = sides
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => /^[A-Z]$/.test(s))
+    .map((s) => s.charCodeAt(0));
+  const last = codes.length > 0 ? Math.max(...codes) : 64;
+  return last >= 90 ? null : String.fromCharCode(last + 1);
+}
+
+/**
+ * Side for a newly added track: the side last picked on any row, else the
+ * last row's side (a freshly opened record), else the first side on offer.
+ */
+export function sideForNewRow(
+  lastSelected: string | null,
+  rows: readonly Pick<TrackFormRow, 'side'>[],
+  sides: readonly string[],
+): string {
+  if (lastSelected) return lastSelected;
+  return rows.at(-1)?.side.trim() || sides[0] || '';
 }
 
 /** Artists currently displayed as checked: the override set once dirty, otherwise the album's own artists. */

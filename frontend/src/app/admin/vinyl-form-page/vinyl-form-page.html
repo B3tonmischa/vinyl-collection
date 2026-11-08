@@ -123,7 +123,9 @@
         <app-track-list-editor
           [rows]="trackRows()"
           [albumArtists]="artists()"
+          [sides]="sides()"
           (rowsChange)="trackRows.set($event)"
+          (sideAdded)="onSideAdded($event)"
         />
       </div>
 
@@ -134,6 +136,7 @@
             <app-image-upload-panel
               [vinylId]="vinyl.id"
               [images]="vinyl.images"
+              [sides]="sides()"
               (imagesChanged)="onImagesChanged()"
             />
           }

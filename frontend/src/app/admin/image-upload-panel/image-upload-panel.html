@@ -179,7 +179,7 @@
         </div>
       }
     </div>
-    @if (!swapMode()) {
+    @if (!swapMode() && canAddDisc) {
       <button
         type="button"
         (click)="addDisc()"

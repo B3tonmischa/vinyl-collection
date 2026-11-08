@@ -39,6 +39,21 @@ const PACKAGING_LABELS: Partial<Record<ImageKind, [label: string, short: string]
 
 export const MAX_DISCS = 10;
 
+/**
+ * Discs needed to hold a release's track sides: A/B on disc 1, C/D on
+ * disc 2, and so on. Only single-letter sides count; anything else (e.g. a
+ * single's "AA") says nothing about the disc count.
+ */
+export function discCountForSides(sides: readonly string[]): number {
+  let count = 1;
+  for (const side of sides) {
+    const letter = side.trim().toUpperCase();
+    if (!/^[A-Z]$/.test(letter)) continue;
+    count = Math.max(count, Math.floor((letter.charCodeAt(0) - 65) / 2) + 1);
+  }
+  return Math.min(count, MAX_DISCS);
+}
+
 export function slotKey(slot: ScanSlot): string {
   return `${slot.kind}-${slot.discNumber}`;
 }

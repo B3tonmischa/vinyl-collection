@@ -19,7 +19,7 @@ import {
 import { ArtistPickerComponent } from '../artist-picker/artist-picker';
 import { ImageUploadPanel } from '../image-upload-panel/image-upload-panel';
 import { TrackListEditorComponent } from '../track-list-editor/track-list-editor';
-import { TrackFormRow, trackRowToPayload } from '../track-list-editor/track-list-editor.logic';
+import { TrackFormRow, knownSides, trackRowToPayload } from '../track-list-editor/track-list-editor.logic';
 
 @Component({
   selector: 'app-vinyl-form-page',
@@ -55,6 +55,13 @@ export class VinylFormPage {
   protected readonly notes = signal('');
   protected readonly artists = signal<Artist[]>([]);
   protected readonly trackRows = signal<TrackFormRow[]>([]);
+  /** Sides added with the tracklist's "+" button that no track may use yet. */
+  private readonly addedSides = signal<string[]>([]);
+  /**
+   * The release's sides: the tracklist's dropdown options, and what decides
+   * how many discs the image panel (and a scan) offers.
+   */
+  protected readonly sides = computed(() => knownSides(this.trackRows(), this.addedSides()));
 
   protected readonly releaseTypes = RELEASE_TYPES;
   protected readonly discSizes = DISC_SIZES;
@@ -91,6 +98,7 @@ export class VinylFormPage {
     this.genre.set(vinyl.genre ?? '');
     this.notes.set(vinyl.notes ?? '');
     this.artists.set(vinyl.artists);
+    this.addedSides.set([]);
     this.trackRows.set(
       [...vinyl.tracks]
         .sort((a, b) => a.position - b.position)
@@ -142,6 +150,10 @@ export class VinylFormPage {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  protected onSideAdded(side: string): void {
+    this.addedSides.update((sides) => [...sides, side]);
   }
 
   protected onImagesChanged(): void {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   allSteps,
   buildSetupItems,
+  discCountForSides,
   makeStep,
   nextPendingIndex,
   selectedSteps,
@@ -98,5 +99,30 @@ describe('nextPendingIndex', () => {
 describe('withStatus', () => {
   it('replaces one entry', () => {
     expect(withStatus(['pending', 'pending'], 1, 'done')).toEqual(['pending', 'done']);
+  });
+});
+
+describe('discCountForSides', () => {
+  it('is one disc for no sides or just A/B', () => {
+    expect(discCountForSides([])).toBe(1);
+    expect(discCountForSides(['A', 'B', ''])).toBe(1);
+  });
+
+  it('puts every two sides on another disc', () => {
+    expect(discCountForSides(['A', 'B', 'C'])).toBe(2);
+    expect(discCountForSides(['D'])).toBe(2);
+    expect(discCountForSides(['A', 'F'])).toBe(3);
+  });
+
+  it('ignores case and surrounding spaces', () => {
+    expect(discCountForSides([' c '])).toBe(2);
+  });
+
+  it('ignores sides that are not a single letter', () => {
+    expect(discCountForSides(['AA', 'CD1', '2'])).toBe(1);
+  });
+
+  it('never goes past the most discs a record can have', () => {
+    expect(discCountForSides(['Z'])).toBe(10);
   });
 });
