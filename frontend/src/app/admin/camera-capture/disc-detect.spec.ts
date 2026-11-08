@@ -5,6 +5,7 @@ import { Circle, Size } from './camera-capture.logic';
 import {
   RimCandidate,
   detectDisc,
+  findDisc,
   fitOutline,
   isPlausibleRim,
   longestGap,
@@ -212,6 +213,16 @@ describe('detectDisc on rendered records', () => {
   it('finds a record away from the middle of the frame', () => {
     const image = render(FRAME, sheet, { cx: 180, cy: 340, rx: 150, ry: 150, surface: splatter });
     expectOnRim(detectDisc(image), { cx: 180, cy: 340, r: 150 });
+  });
+
+  it('also finds the edge of the label, for straightening', () => {
+    const image = render(FRAME, sheet, { ...upright, surface: blackVinyl });
+    const found = findDisc(image)!;
+    expect(found.ring).not.toBeNull();
+    const radii = found.ring!.map((p) => Math.hypot(p.x - 212, p.y - 284));
+    const mean = radii.reduce((s, r) => s + r, 0) / radii.length;
+    expect(mean / 165).toBeCloseTo(0.33, 1);
+    expect(found.rim.length).toBeGreaterThan(100);
   });
 
   it('finds no record on an empty sheet', () => {

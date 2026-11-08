@@ -18,7 +18,7 @@
 //      the trace repeats on the outline (fitOutline, settleRim).
 //   4. The best-covered, largest outline is the rim (pickRim).
 
-import { Circle, Size } from './camera-capture.logic';
+import { Circle, Point, Size } from './camera-capture.logic';
 import { Pixels } from './sleeve-refine';
 
 /** Longest edge of the copy the search runs on. A rim needs no more, and creases do. */
@@ -84,15 +84,14 @@ const BASIS = (() => {
   return basis;
 })();
 
-/** What disc-detect.worker.ts receives and answers; see disc-detector.ts. */
-export interface DiscRequest {
-  id: number;
-  image: ImageData;
-}
-
-export interface DiscReply {
-  id: number;
-  circle: Circle | null;
+/** A record found in a photo, in the photo's pixels. */
+export interface FoundDisc {
+  /** The rim as a circle: its outline's centre and mean radius. */
+  circle: Circle;
+  /** Points on the rim. */
+  rim: Point[];
+  /** Points on a ring concentric with it, such as the label's edge, if one was found. */
+  ring: Point[] | null;
 }
 
 /** A candidate rim, in pixels of the working copy. */
@@ -132,11 +131,15 @@ interface Outline {
   coefficients: Float64Array;
   coverage: number;
   gap: number;
+  /** 1 for the rays whose path lies on the outline, else 0. */
+  onOutline: Float64Array;
 }
 
 interface Traced extends RimCandidate {
   c3: number;
   c4: number;
+  /** Where the outline lies on an edge, once settled. */
+  points: Point[];
 }
 
 /** Box-filtered copy with its longer edge at `maxEdge`, or at the source's size if smaller. */
@@ -274,13 +277,13 @@ function edgeLevels(field: EdgeField): { vote: number; rim: number } {
 }
 
 /**
- * Likely centres, best first. Each edge votes along its normal, into one of
+ * How likely each pixel is to be a record's centre. Each edge votes along its normal, into one of
  * four maps by direction. A circle votes from every direction, a fold in a
  * sheet from one or two, so a centre has to stand out in all four. It also has
  * to stand out from its surroundings: clutter spreads its votes while a circle
  * focuses them.
  */
-export function findCentres(field: EdgeField, level: number): { x: number; y: number }[] {
+export function centreVotes(field: EdgeField, level: number): Float32Array {
   const { width, height, gx, gy, magnitude } = field;
   const shortSide = Math.min(width, height);
   const maps = [0, 1, 2, 3].map(() => new Float32Array(width * height));
@@ -327,20 +330,34 @@ export function findCentres(field: EdgeField, level: number): { x: number; y: nu
   for (let i = 0; i < score.length; i++) {
     score[i] = (standout[0][i] * standout[1][i] * standout[2][i] * standout[3][i]) ** 0.25;
   }
+  return score;
+}
 
+/**
+ * The best `count` peaks of centreVotes, at least `spacing` apart, and only
+ * within `area` if given.
+ */
+function pickCentres(
+  score: Float32Array,
+  { width, height }: Size,
+  count: number,
+  spacing: number,
+  area?: Circle,
+): { x: number; y: number }[] {
   const ranked: { x: number; y: number; value: number }[] = [];
   for (let y = 4; y < height - 4; y += 2) {
     for (let x = 4; x < width - 4; x += 2) {
       const value = score[y * width + x];
-      if (value > 0) ranked.push({ x, y, value });
+      if (value <= 0) continue;
+      if (area && Math.hypot(x - area.cx, y - area.cy) > area.r) continue;
+      ranked.push({ x, y, value });
     }
   }
   ranked.sort((a, b) => b.value - a.value);
 
   const centres: { x: number; y: number }[] = [];
-  const spacing = shortSide * CENTRE_SPACING;
   for (const { x, y } of ranked) {
-    if (centres.length >= MAX_CENTRES) break;
+    if (centres.length >= count) break;
     if (centres.some((c) => Math.hypot(c.x - x, c.y - y) < spacing)) continue;
     let dx = 0;
     let dy = 0;
@@ -355,8 +372,6 @@ export function findCentres(field: EdgeField, level: number): { x: number; y: nu
     }
     centres.push({ x: x + dx / sum, y: y + dy / sum });
   }
-  // The user aims at the guide, and a tilted record's centre can vote badly.
-  centres.push({ x: width / 2, y: height / 2 });
   return centres;
 }
 
@@ -530,12 +545,25 @@ export function fitOutline(path: Int32Array, edges: PolarEdges): Outline | null 
     coefficients: coefficients as Float64Array,
     coverage: weights.reduce((sum, w) => sum + w, 0) / ANGLES,
     gap: longestGap(weights),
+    onOutline: weights,
   };
 }
 
-function traced(outline: Outline, centre: { x: number; y: number }): Traced {
+function toTraced(outline: Outline, centre: { x: number; y: number }, path?: Int32Array): Traced {
   const [c0, c1, c2, c3, c4] = outline.coefficients;
+  const points: Point[] = [];
+  if (path) {
+    for (let k = 0; k < ANGLES; k++) {
+      if (!outline.onOutline[k]) continue;
+      const row = k * HARMONICS;
+      points.push({
+        x: centre.x + BASIS[row + 1] * path[k],
+        y: centre.y + BASIS[row + 2] * path[k],
+      });
+    }
+  }
   return {
+    points,
     cx: centre.x + c1,
     cy: centre.y + c2,
     r: c0,
@@ -585,8 +613,17 @@ function crossLip(
   return out;
 }
 
-/** Re-traces an outline from its own centre, which a tilted record's label is well off. */
-function settleRim(field: EdgeField, candidate: Traced, level: number, reach: number): Traced {
+/**
+ * Re-traces an outline from its own centre, which a tilted record's label is
+ * well off. A rim also gets moved across a clear record's lip; a ring doesn't.
+ */
+function settleRim(
+  field: EdgeField,
+  candidate: Traced,
+  level: number,
+  reach: number,
+  isRim = true,
+): Traced {
   let current = candidate;
   for (const share of SETTLE_SPANS) {
     const centre = { x: current.cx, y: current.cy };
@@ -599,19 +636,70 @@ function settleRim(field: EdgeField, candidate: Traced, level: number, reach: nu
       );
     }
     const span = Math.max(4, Math.round(current.r * share));
-    const path = crossLip(
-      tracePath(edges, baseline, span),
-      edges,
-      field,
-      centre,
-      Math.ceil(current.r * LIP_REACH),
-    );
+    const traced = tracePath(edges, baseline, span);
+    const path = isRim
+      ? crossLip(traced, edges, field, centre, Math.ceil(current.r * LIP_REACH))
+      : traced;
     const outline = fitOutline(path, edges);
     if (!outline || outline.coverage < current.coverage * (1 - SETTLE_MAX_LOSS)) break;
-    current = traced(outline, centre);
+    current = toTraced(outline, centre, path);
   }
   return current;
 }
+
+/**
+ * A ring inside the rim and concentric with it: the label's edge, the dead
+ * wax or a band of grooves. Any will do, as long as it's a clean circle;
+ * disc-straighten.ts needs one to find the record's centre in a tilted shot.
+ * It's traced from each likely centre near the rim's, since in a tilted shot
+ * the label sits well off the rim's centre, but the votes find it.
+ */
+function findRing(
+  field: EdgeField,
+  rim: Traced,
+  level: number,
+  votes: Float32Array,
+): Traced | null {
+  const largest = rim.r * RING_MAX_RADIUS;
+  const reach = largest * WINDOW_SPAN;
+  const near = (p: { x: number; y: number }) =>
+    Math.hypot(p.x - rim.cx, p.y - rim.cy) <= rim.r * RING_MAX_OFFSET;
+  const likely = pickCentres(votes, field, RING_CENTRES, rim.r * RING_CENTRE_SPACING, {
+    cx: rim.cx,
+    cy: rim.cy,
+    r: rim.r * RING_MAX_OFFSET,
+  });
+  let best: Traced | null = null;
+  for (const centre of [{ x: rim.cx, y: rim.cy }, ...likely]) {
+    const edges = polarEdges(field, centre, level, reach);
+    for (let start = rim.r * RING_MIN_RADIUS; start < largest; start *= WINDOW_STEP) {
+      const span = Math.max(3, Math.round((start * (WINDOW_SPAN - 1)) / 2));
+      const middle = Math.round(start) + span;
+      const path = tracePath(edges, new Int32Array(ANGLES).fill(middle), span);
+      const outline = fitOutline(path, edges);
+      if (!outline || outline.coverage < MIN_TRACE_COVERAGE) continue;
+      const ring = settleRim(field, toTraced(outline, centre, path), level, reach, false);
+      const clean =
+        ring.coverage >= RING_MIN_COVERAGE &&
+        ring.gap <= MAX_GAP &&
+        ring.ellipticity <= MAX_ELLIPTICITY &&
+        ring.r <= largest &&
+        near({ x: ring.cx, y: ring.cy });
+      if (clean && (!best || ring.coverage > best.coverage)) best = ring;
+    }
+  }
+  return best;
+}
+
+// A ring for straightening: radius range and how far off the rim's centre it
+// may be, as shares of the rim's radius, and how much of it must lie on edges.
+const RING_MIN_RADIUS = 0.2;
+const RING_MAX_RADIUS = 0.62;
+const RING_MAX_OFFSET = 0.25;
+const RING_MIN_COVERAGE = 0.75;
+/** Centres a ring is traced from, besides the rim's, and how far apart, as a share of its radius. */
+const RING_CENTRES = 3;
+const RING_CENTRE_SPACING = 0.05;
 
 /** Whether a candidate could be a whole record lying in this frame. */
 export function isPlausibleRim(rim: RimCandidate, frame: Size): boolean {
@@ -645,6 +733,11 @@ export function pickRim<T extends RimCandidate>(candidates: T[], frame: Size): T
 
 /** The record's rim as a circle in the pixels of `image`, or null if there's no record. */
 export function detectDisc(image: Pixels): Circle | null {
+  return findDisc(image)?.circle ?? null;
+}
+
+/** The record in `image`, with what straightening it needs, or null if there's no record. */
+export function findDisc(image: Pixels): FoundDisc | null {
   const copy = workingCopy(image);
   const field = edgeField(copy);
   const level = edgeLevels(field);
@@ -653,8 +746,12 @@ export function detectDisc(image: Pixels): Circle | null {
   const largest = shortSide * MAX_RADIUS;
   const reach = largest * WINDOW_SPAN;
 
+  const votes = centreVotes(field, level.vote);
+  const centres = pickCentres(votes, copy, MAX_CENTRES, shortSide * CENTRE_SPACING);
+  // The user aims at the guide, and a tilted record's centre can vote badly.
+  centres.push({ x: copy.width / 2, y: copy.height / 2 });
   const found: Traced[] = [];
-  for (const centre of findCentres(field, level.vote)) {
+  for (const centre of centres) {
     const edges = polarEdges(field, centre, level.rim, reach);
     for (let start = smallest; start < largest; start *= WINDOW_STEP) {
       const span = Math.round((start * (WINDOW_SPAN - 1)) / 2);
@@ -664,7 +761,8 @@ export function detectDisc(image: Pixels): Circle | null {
       for (let k = 0; k < ANGLES; k++) if (edges.values[k * edges.radii + path[k]] > 0) onEdges++;
       if (onEdges / ANGLES < MIN_TRACE_COVERAGE) continue;
       const outline = fitOutline(path, edges);
-      if (outline && outline.coverage >= MIN_TRACE_COVERAGE) found.push(traced(outline, centre));
+      if (outline && outline.coverage >= MIN_TRACE_COVERAGE)
+        found.push(toTraced(outline, centre, path));
     }
   }
 
@@ -682,12 +780,17 @@ export function detectDisc(image: Pixels): Circle | null {
 
   const settled = distinct.map((c) => settleRim(field, c, level.rim, reach));
   const rim = pickRim(settled, copy);
-  return (
-    rim && {
-      // A copy pixel's center lies half a pixel in.
-      cx: (rim.cx + 0.5) * copy.scale,
-      cy: (rim.cy + 0.5) * copy.scale,
-      r: rim.r * copy.scale,
-    }
-  );
+  if (!rim) return null;
+  const ring = findRing(field, rim, level.rim, votes);
+  // A copy pixel's center lies half a pixel in.
+  const toImage = (p: Point): Point => ({
+    x: (p.x + 0.5) * copy.scale,
+    y: (p.y + 0.5) * copy.scale,
+  });
+  const centre = toImage({ x: rim.cx, y: rim.cy });
+  return {
+    circle: { cx: centre.x, cy: centre.y, r: rim.r * copy.scale },
+    rim: rim.points.map(toImage),
+    ring: ring ? ring.points.map(toImage) : null,
+  };
 }
