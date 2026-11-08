@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canAnimateStep,
+  clampStepTarget,
   computeWindow,
+  easeOutCubic,
   easeOutSeptic,
+  easedPosition,
   randomIndex,
   rollInDurationMs,
   spinOffsetPx,
@@ -9,8 +13,90 @@ import {
   spinSizeAnchors,
   spinSlotStyle,
   spinSlots,
+  stepDurationMs,
   wrapIndex,
 } from './vinyl-carousel.logic';
+
+describe('stepDurationMs', () => {
+  it('is slower than the old 300ms CSS transition', () => {
+    expect(stepDurationMs(false)).toBeGreaterThan(300);
+  });
+
+  it('is shorter than the roll-in', () => {
+    expect(stepDurationMs(false)).toBeLessThan(rollInDurationMs(false));
+  });
+
+  it('is 0 under reduced motion', () => {
+    expect(stepDurationMs(true)).toBe(0);
+  });
+});
+
+describe('easeOutCubic', () => {
+  it('runs from 0 to 1 and clamps outside that range', () => {
+    expect(easeOutCubic(0)).toBe(0);
+    expect(easeOutCubic(1)).toBe(1);
+    expect(easeOutCubic(-1)).toBe(0);
+    expect(easeOutCubic(2)).toBe(1);
+  });
+
+  it('is gentler at the start than the septic roll-in curve', () => {
+    expect(easeOutCubic(0.1)).toBeLessThan(easeOutSeptic(0.1));
+  });
+
+  it('only increases', () => {
+    let previous = 0;
+    for (let i = 1; i <= 20; i++) {
+      const value = easeOutCubic(i / 20);
+      expect(value).toBeGreaterThan(previous);
+      previous = value;
+    }
+  });
+});
+
+describe('easedPosition', () => {
+  it('starts at from and lands exactly on to', () => {
+    expect(easedPosition(3, 5, 0, easeOutCubic)).toBe(3);
+    expect(easedPosition(3, 5, 1, easeOutCubic)).toBe(5);
+    expect(easedPosition(3, 5, 1.4, easeOutCubic)).toBe(5);
+  });
+
+  it('moves backwards when to is below from', () => {
+    const mid = easedPosition(4, 2, 0.5, easeOutCubic);
+    expect(mid).toBeLessThan(4);
+    expect(mid).toBeGreaterThan(2);
+  });
+});
+
+describe('canAnimateStep', () => {
+  it('needs at least the 5-card window', () => {
+    expect(canAnimateStep(0)).toBe(false);
+    expect(canAnimateStep(1)).toBe(false);
+    expect(canAnimateStep(4)).toBe(false);
+    expect(canAnimateStep(5)).toBe(true);
+    expect(canAnimateStep(200)).toBe(true);
+  });
+});
+
+describe('clampStepTarget', () => {
+  it('passes a nearby request through', () => {
+    expect(clampStepTarget(11, 10, 2)).toBe(11);
+    expect(clampStepTarget(8, 10, 2)).toBe(8);
+  });
+
+  it('holds a runaway request within maxLead slots of the position', () => {
+    expect(clampStepTarget(20, 10, 2)).toBe(12);
+    expect(clampStepTarget(0, 10, 2)).toBe(8);
+  });
+
+  it('always lands on a whole slot, even from a fractional position', () => {
+    expect(clampStepTarget(20, 10.4, 2)).toBe(12);
+    expect(clampStepTarget(0, 10.4, 2)).toBe(9);
+  });
+
+  it('keeps going past the wrap, since positions are unwrapped', () => {
+    expect(clampStepTarget(-1, 0, 2)).toBe(-1);
+  });
+});
 
 describe('wrapIndex', () => {
   it('returns the index unchanged when already in range', () => {
