@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { CarouselStateService } from '../../core/services/carousel-state';
 import { Vinyl } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
 import {
@@ -9,12 +10,13 @@ import {
   easeOutCubic,
   easeOutSeptic,
   easedPosition,
-  randomIndex,
   rollInDurationMs,
+  spinAgainTarget,
   spinOffsetPx,
   spinSizeAnchors,
   spinSlotStyle,
   spinSlots,
+  startIndex,
   stepDurationMs,
   wrapIndex,
 } from './vinyl-carousel.logic';
@@ -32,9 +34,12 @@ const MAX_STEP_LEAD = 2;
  * Default (no-search) browse view: a horizontal carousel closer to
  * flipping through a crate of records than scanning a list. Renders only
  * the 5-card window around the center (offsets -2..2) — cheap regardless
- * of collection size. Landing here (including via back-navigation, since
- * the component is re-created) picks a random starting center; the
- * collection's own order is otherwise left as the API returns it.
+ * of collection size. The first time the gallery is shown after a page
+ * load, it rolls in onto a random record. Coming back later (from a
+ * record's page, a search, admin) re-opens on the record that was last
+ * centered, with no spin; see CarouselStateService. The Spin button rolls
+ * onto a new random record on demand. The collection's own order is left
+ * as the API returns it.
  */
 @Component({
   selector: 'app-vinyl-carousel',
@@ -72,6 +77,7 @@ const MAX_STEP_LEAD = 2;
 export class VinylCarouselComponent {
   private readonly router = inject(Router);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly state = inject(CarouselStateService);
 
   private readonly _vinyls = signal<Vinyl[]>([]);
   private readonly _center = signal<number | null>(null);
@@ -111,7 +117,13 @@ export class VinylCarouselComponent {
   set vinyls(value: Vinyl[]) {
     this._vinyls.set(value);
     if (value.length > 0 && this._center() === null) {
-      this.startRollIn(randomIndex(value.length));
+      const start = startIndex(value.map((v) => v.id), this.state.centeredVinylId);
+      if (start.restored || this.state.rolledIn) {
+        this.land(start.index);
+      } else {
+        this.state.rolledIn = true;
+        this.startRollIn(start.index);
+      }
     }
   }
 
@@ -179,7 +191,7 @@ export class VinylCarouselComponent {
     const center = this._center();
     if (center === null || list.length === 0) return;
     if (this.reducedMotion || !canAnimateStep(list.length)) {
-      this._center.set(wrapIndex(center + delta, list.length));
+      this.land(center + delta);
       return;
     }
     const gliding = this.spinning();
@@ -215,12 +227,39 @@ export class VinylCarouselComponent {
   }
 
   /**
+   * The Spin button: rolls on from the record currently shown onto a
+   * random other one, with the same long, decelerating motion as the
+   * first roll-in. Takes over from a step that is still gliding.
+   */
+  protected spinAgain(): void {
+    if (this.rollingIn()) return;
+    const list = this._vinyls();
+    const center = this._center();
+    if (center === null || list.length === 0) return;
+    const from = this.spinning() ? (this.spinPosition() ?? center) : center;
+    const target = spinAgainTarget(Math.round(from), list.length, SPIN_DISTANCE);
+    if (this.reducedMotion) {
+      this.cancelAnimation();
+      this.spinPosition.set(null);
+      this.spinning.set(false);
+      this.land(target);
+      return;
+    }
+    this.keepFocusOnHost();
+    // Captions hide during the spin, so they drop in again on landing.
+    this.stepped.set(false);
+    this.rollingIn.set(true);
+    this.animate(from, target, rollInDurationMs(false), easeOutSeptic);
+  }
+
+  /**
    * Spins the carousel onto `target` with one long, decelerating motion,
-   * starting SPIN_DISTANCE slots back.
+   * starting SPIN_DISTANCE slots back. Only for the first showing, when
+   * nothing is on screen yet to jump away from.
    */
   private startRollIn(target: number): void {
     if (this.reducedMotion) {
-      this._center.set(target);
+      this.land(target);
       return;
     }
     this.rollingIn.set(true);
@@ -236,6 +275,9 @@ export class VinylCarouselComponent {
   private animate(from: number, to: number, durationMs: number, ease: (t: number) => number): void {
     this.cancelAnimation();
     this.animationTarget = to;
+    // Leaving mid-glide should come back to where it was headed.
+    const list = this._vinyls();
+    this.state.centeredVinylId = list[wrapIndex(to, list.length)]?.id ?? null;
     this.spinPosition.set(from);
     this.spinning.set(true);
 
@@ -245,7 +287,7 @@ export class VinylCarouselComponent {
       if (t >= 1) {
         this.rafId = null;
         this.spinPosition.set(null);
-        this._center.set(wrapIndex(to, this._vinyls().length));
+        this.land(to);
         this.spinning.set(false);
         this.rollingIn.set(false);
         return;
@@ -254,6 +296,14 @@ export class VinylCarouselComponent {
       this.rafId = requestAnimationFrame(tick);
     };
     this.rafId = requestAnimationFrame(tick);
+  }
+
+  /** Settles the center on (unwrapped) slot `slot` and remembers that record for the next visit. */
+  private land(slot: number): void {
+    const list = this._vinyls();
+    const index = wrapIndex(slot, list.length);
+    this._center.set(index);
+    this.state.centeredVinylId = list[index]?.id ?? null;
   }
 
   private cancelAnimation(): void {
