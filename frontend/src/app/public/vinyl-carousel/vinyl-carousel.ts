@@ -89,8 +89,14 @@ export class VinylCarouselComponent {
 
   /** True while the filmstrip is shown: the roll-in spin, or a card-to-card step. */
   protected readonly spinning = signal(false);
-  /** True during the roll-in only; manual navigation is ignored until it lands. */
-  private readonly rollingIn = signal(false);
+  /** True during the roll-in only; manual navigation is ignored until it lands. Captions stay hidden while it spins. */
+  protected readonly rollingIn = signal(false);
+  /**
+   * Set by the first filmstrip step. From then on captions travel with
+   * their cards through each glide, so the static row they land in must
+   * not replay the caption drop-in.
+   */
+  protected readonly stepped = signal(false);
   /** Continuous fractional center position, only meaningful while spinning. */
   private readonly spinPosition = signal<number | null>(null);
   /** Unwrapped slot the running animation lands on. */
@@ -182,6 +188,7 @@ export class VinylCarouselComponent {
     const target = clampStepTarget(base + delta, position, MAX_STEP_LEAD);
     if (gliding && target === this.animationTarget) return;
     this.keepFocusOnHost();
+    this.stepped.set(true);
     this.animate(position, target, stepDurationMs(false), easeOutCubic);
   }
 

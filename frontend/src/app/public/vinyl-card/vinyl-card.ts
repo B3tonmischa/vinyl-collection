@@ -49,6 +49,12 @@ export class VinylCardComponent {
    * height to space rows.
    */
   @Input() captionOverlay = false;
+  /**
+   * Play the overlay caption's drop-in when it appears. The carousel turns
+   * this off once the user steps between cards, since the caption then
+   * rides along with the card instead of appearing fresh.
+   */
+  @Input() captionDropIn = true;
 
   private readonly apiConfig = inject(ApiConfigService);
 
