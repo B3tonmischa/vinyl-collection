@@ -8,7 +8,7 @@
       <div class="relative h-full w-full">
         @for (card of spinCards(); track card.virtualIndex) {
           <div
-            class="floating-card absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+            class="floating-card absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
             [class.cursor-pointer]="!rollingIn()"
             [style.left]="'calc(50% + ' + card.offsetPx + 'px)'"
             [style.width.px]="card.style.widthPx"
