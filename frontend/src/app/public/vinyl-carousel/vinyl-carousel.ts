@@ -1,16 +1,22 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Vinyl } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
 import {
+  canAnimateStep,
+  clampStepTarget,
   computeWindow,
+  easeOutCubic,
+  easeOutSeptic,
+  easedPosition,
   randomIndex,
   rollInDurationMs,
   spinOffsetPx,
-  spinPositionAt,
   spinSizeAnchors,
   spinSlotStyle,
   spinSlots,
+  stepDurationMs,
+  wrapIndex,
 } from './vinyl-carousel.logic';
 
 /** How many virtual slots (not wraps) the roll-in spin travels before landing. */
@@ -19,6 +25,8 @@ const SPIN_DISTANCE = 20;
 const SPIN_SLOT_RADIUS = 3;
 /** Matches the steady-state row's own `gap-3`. */
 const SPIN_GAP_PX = 12;
+/** How far (in slots) queued steps may run ahead of what's on screen. */
+const MAX_STEP_LEAD = 2;
 
 /**
  * Default (no-search) browse view: a horizontal carousel closer to
@@ -63,7 +71,7 @@ const SPIN_GAP_PX = 12;
 })
 export class VinylCarouselComponent {
   private readonly router = inject(Router);
-  private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   private readonly _vinyls = signal<Vinyl[]>([]);
   private readonly _center = signal<number | null>(null);
@@ -79,10 +87,19 @@ export class VinylCarouselComponent {
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 640px)').matches,
   );
 
-  /** True while the roll-in spin is running; manual navigation is ignored until it lands. */
+  /** True while the filmstrip is shown: the roll-in spin, or a card-to-card step. */
   protected readonly spinning = signal(false);
+  /** True during the roll-in only; manual navigation is ignored until it lands. */
+  private readonly rollingIn = signal(false);
   /** Continuous fractional center position, only meaningful while spinning. */
   private readonly spinPosition = signal<number | null>(null);
+  /** Unwrapped slot the running animation lands on. */
+  private animationTarget = 0;
+  private rafId: number | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.cancelAnimation());
+  }
 
   @Input({ required: true })
   set vinyls(value: Vinyl[]) {
@@ -120,12 +137,19 @@ export class VinylCarouselComponent {
   }
 
   protected onCardClick(item: { offset: number; index: number }): void {
-    if (this.spinning()) return;
+    if (this.spinning() || this.dragged) return;
     if (item.offset === 0) {
       this.openCentered();
     } else {
-      this._center.set(item.index);
+      // The offset, not index - center: index math breaks across the wrap.
+      this.shift(item.offset);
     }
+  }
+
+  /** A click on a card while a step is still gliding retargets to it. */
+  protected onSpinCardClick(card: { virtualIndex: number }): void {
+    if (this.rollingIn() || this.dragged) return;
+    this.shift(card.virtualIndex - this.animationTarget);
   }
 
   protected prev(): void {
@@ -136,12 +160,41 @@ export class VinylCarouselComponent {
     this.shift(1);
   }
 
+  /**
+   * Moves the center by `delta` slots. With enough records, this glides
+   * through the same filmstrip as the roll-in. Input that arrives
+   * mid-glide adds to the pending target and restarts the ease from the
+   * current position, so rapid presses keep moving instead of being
+   * dropped.
+   */
   private shift(delta: number): void {
-    if (this.spinning()) return;
+    if (this.rollingIn() || delta === 0) return;
     const list = this._vinyls();
     const center = this._center();
     if (center === null || list.length === 0) return;
-    this._center.set((((center + delta) % list.length) + list.length) % list.length);
+    if (this.reducedMotion || !canAnimateStep(list.length)) {
+      this._center.set(wrapIndex(center + delta, list.length));
+      return;
+    }
+    const gliding = this.spinning();
+    const position = this.spinPosition() ?? center;
+    const base = gliding ? this.animationTarget : center;
+    const target = clampStepTarget(base + delta, position, MAX_STEP_LEAD);
+    if (gliding && target === this.animationTarget) return;
+    this.keepFocusOnHost();
+    this.animate(position, target, stepDurationMs(false), easeOutCubic);
+  }
+
+  /**
+   * A clicked card's button is replaced by the filmstrip, which would drop
+   * focus to <body> and stop the host's arrow-key bindings. Hand focus to
+   * the host first. Focus on the prev/next buttons stays where it is.
+   */
+  private keepFocusOnHost(): void {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest('[data-carousel-card]')) {
+      this.host.nativeElement.focus({ preventScroll: true });
+    }
   }
 
   private openCentered(): void {
@@ -155,49 +208,68 @@ export class VinylCarouselComponent {
   }
 
   /**
-   * Spins the carousel onto `target` with one continuous, decelerating
-   * motion — a `requestAnimationFrame` loop driving a fractional position
-   * — instead of discrete steps. Each frame just reads the eased position
-   * directly, so there's nothing to restart or pause between frames.
+   * Spins the carousel onto `target` with one long, decelerating motion,
+   * starting SPIN_DISTANCE slots back.
    */
   private startRollIn(target: number): void {
     if (this.reducedMotion) {
       this._center.set(target);
       return;
     }
-    const duration = rollInDurationMs(false);
-    const realStart = target - SPIN_DISTANCE;
-    this.spinPosition.set(realStart);
+    this.rollingIn.set(true);
+    this.animate(target - SPIN_DISTANCE, target, rollInDurationMs(false), easeOutSeptic);
+  }
+
+  /**
+   * Glides the filmstrip from `from` to `to` (unwrapped slots) with a
+   * `requestAnimationFrame` loop driving a fractional position rather than
+   * discrete steps. Each frame reads the eased position directly, so a new
+   * call can take over mid-flight from wherever the strip currently is.
+   */
+  private animate(from: number, to: number, durationMs: number, ease: (t: number) => number): void {
+    this.cancelAnimation();
+    this.animationTarget = to;
+    this.spinPosition.set(from);
     this.spinning.set(true);
 
     const startTime = performance.now();
     const tick = (now: number) => {
-      const t = (now - startTime) / duration;
+      const t = (now - startTime) / durationMs;
       if (t >= 1) {
+        this.rafId = null;
         this.spinPosition.set(null);
-        this._center.set(target);
+        this._center.set(wrapIndex(to, this._vinyls().length));
         this.spinning.set(false);
+        this.rollingIn.set(false);
         return;
       }
-      this.spinPosition.set(spinPositionAt(realStart, SPIN_DISTANCE, t));
-      rafId = requestAnimationFrame(tick);
+      this.spinPosition.set(easedPosition(from, to, t, ease));
+      this.rafId = requestAnimationFrame(tick);
     };
-    let rafId = requestAnimationFrame(tick);
-    this.destroyRef.onDestroy(() => cancelAnimationFrame(rafId));
+    this.rafId = requestAnimationFrame(tick);
+  }
+
+  private cancelAnimation(): void {
+    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    this.rafId = null;
   }
 
   private dragStartX: number | null = null;
+  /** Set when a pointer gesture was a drag, so the click that follows it doesn't also retarget. */
+  private dragged = false;
 
   protected onPointerDown(event: PointerEvent): void {
     this.dragStartX = event.clientX;
+    this.dragged = false;
   }
 
   protected onPointerUp(event: PointerEvent): void {
-    if (this.spinning()) return;
+    if (this.rollingIn()) return;
     if (this.dragStartX === null) return;
     const delta = event.clientX - this.dragStartX;
     this.dragStartX = null;
     const threshold = 40;
+    this.dragged = Math.abs(delta) > threshold;
     if (delta > threshold) this.prev();
     else if (delta < -threshold) this.next();
   }

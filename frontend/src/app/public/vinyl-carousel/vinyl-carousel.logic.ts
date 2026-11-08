@@ -45,7 +45,50 @@ export function easeOutSeptic(t: number): number {
  * can be differenced/interpolated smoothly across the whole spin.
  */
 export function spinPositionAt(realStart: number, distance: number, t: number): number {
-  return realStart + distance * easeOutSeptic(t);
+  return easedPosition(realStart, realStart + distance, t, easeOutSeptic);
+}
+
+/**
+ * Duration (ms) of one card-to-card step (arrow, click, drag). These
+ * reuse the roll-in's continuous filmstrip, just over a slot or two
+ * instead of twenty. Reduced motion skips it (0 = no animation).
+ */
+export function stepDurationMs(reducedMotion: boolean): number {
+  return reducedMotion ? 0 : 650;
+}
+
+/**
+ * Cubic ease-out for steps. Septic is too steep over a single slot (it
+ * jumps most of the way at once, then crawls). Cubic starts briskly
+ * enough to feel responsive and still settles gently.
+ */
+export function easeOutCubic(t: number): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  return 1 - (1 - clamped) ** 3;
+}
+
+/** Position at normalized time `t` (clamped to 0..1) between `from` and `to` under `ease`. */
+export function easedPosition(from: number, to: number, t: number, ease: (t: number) => number): number {
+  return from + (to - from) * ease(Math.min(1, Math.max(0, t)));
+}
+
+/**
+ * Whether steps can use the filmstrip. Below the 5-card window,
+ * `spinSlots` repeats cards that `computeWindow` drops, so the hand-off at
+ * landing would pop. Tiny collections keep the plain CSS transition.
+ */
+export function canAnimateStep(length: number): boolean {
+  return length >= 5;
+}
+
+/**
+ * The integer slot a step should land on. `requested` is where the
+ * user's inputs add up to. It's held within `maxLead` slots of the
+ * current (fractional) `position`, so holding an arrow key browses at a
+ * steady pace instead of racing far ahead of what's on screen.
+ */
+export function clampStepTarget(requested: number, position: number, maxLead: number): number {
+  return Math.min(Math.floor(position + maxLead), Math.max(Math.ceil(position - maxLead), requested));
 }
 
 export interface CarouselSlotStyle {
