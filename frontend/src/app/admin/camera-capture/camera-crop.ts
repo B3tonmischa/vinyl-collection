@@ -1,7 +1,8 @@
 // Canvas plumbing for camera capture: turning photos/frames into a capped
 // "working" canvas, downscaled ImageData for detection, and the final
 // upload Files. Geometry lives in camera-capture.logic.ts; perspective
-// warping happens in the OpenCV worker (scan-detector.ts). Also draws the
+// warping happens in the workers (scan-detector.ts for sleeves,
+// disc-detector.ts for records). Also draws the
 // magnifier shown while dragging a crop handle.
 
 import {
@@ -97,6 +98,12 @@ function canvasToFile(
       quality,
     ),
   );
+}
+
+export function imageDataToCanvas(image: ImageData): HTMLCanvasElement {
+  const [canvas, ctx] = newCanvas(image);
+  ctx.putImageData(image, 0, 0);
+  return canvas;
 }
 
 /** Sleeve output: JPEG (no alpha needed, much smaller than PNG). */

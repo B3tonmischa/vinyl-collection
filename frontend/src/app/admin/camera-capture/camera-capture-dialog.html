@@ -231,9 +231,11 @@
               }}
             } @else {
               {{
-                autoDetected()
-                  ? 'Record detected — drag the middle to move, the edge handle to resize.'
-                  : 'Drag the middle onto the spindle hole and the edge handle to the rim.'
+                straightened()
+                  ? 'Record detected and straightened — drag the middle to move, the edge handle to resize.'
+                  : autoDetected()
+                    ? 'Record detected — drag the middle to move, the edge handle to resize.'
+                    : 'Drag the middle onto the spindle hole and the edge handle to the rim.'
               }}
             }
           </p>

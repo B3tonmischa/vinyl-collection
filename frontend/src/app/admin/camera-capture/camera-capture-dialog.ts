@@ -16,6 +16,7 @@ import {
   Circle,
   DETECT_MAX_EDGE,
   LIVE_DETECT_MAX_EDGE,
+  OUTPUT_MAX_EDGE,
   Point,
   Quad,
   SteadyDisc,
@@ -43,10 +44,13 @@ import {
   drawLoupe,
   fileToWorkingCanvas,
   fullImageData,
+  imageDataToCanvas,
   imageDataToJpegFile,
   toWorkingCanvas,
 } from './camera-crop';
+import type { FoundDisc } from './disc-detect';
 import { DiscDetector } from './disc-detector';
+import { planStraightening } from './disc-straighten';
 import { OpenCvScanDetector } from './scan-detector';
 import { REFINE_BAND_DETECTION_PX, refineSleeveQuad } from './sleeve-refine';
 import {
@@ -200,6 +204,8 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   protected readonly quad = signal<Quad | null>(null);
   protected readonly circle = signal<Circle | null>(null);
   protected readonly autoDetected = signal(false);
+  /** The record was shot at an angle and the photo has been straightened. */
+  protected readonly straightened = signal(false);
   /** Top corner the magnifier shows in while a handle is dragged, else null. */
   protected readonly loupeAt = signal<'left' | 'right' | null>(null);
   protected readonly loupeCssPx = LOUPE_CSS_PX;
@@ -349,7 +355,7 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
       if (step.mode === 'sleeve') {
         this.showLive(this.liveQuad, await this.detectSleeve(image, size));
       } else {
-        const found = await this.detectDisc(image, size);
+        const found = (await this.detectDisc(image, size))?.circle ?? null;
         this.steady = found ? steadyDisc(this.steady, found) : this.steady;
         this.showLive(this.liveCircle, found && this.steady?.shown);
       }
@@ -376,11 +382,31 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
     return quad ? scalePoints(quad, detSize, target) : null;
   }
 
-  /** The record's circle in `target` pixel space, or null. */
-  private async detectDisc(image: ImageData, target: Size): Promise<Circle | null> {
+  /** The record in `target` pixel space, or null. */
+  private async detectDisc(image: ImageData, target: Size): Promise<FoundDisc | null> {
     const detSize = { width: image.width, height: image.height };
-    const circle = await this.discDetector.detect(image);
-    return circle ? scaleCircle(circle, detSize, target) : null;
+    const found = await this.discDetector.find(image);
+    return (
+      found && {
+        circle: scaleCircle(found.circle, detSize, target),
+        rim: scalePoints(found.rim, detSize, target),
+        ring: found.ring && scalePoints(found.ring, detSize, target),
+      }
+    );
+  }
+
+  /**
+   * A record shot at an angle, straightened so it's round with the label in
+   * the middle, or null if it's round enough already or that can't be done.
+   */
+  private async straightenDisc(
+    canvas: HTMLCanvasElement,
+    found: FoundDisc,
+  ): Promise<{ canvas: HTMLCanvasElement; rim: Circle } | null> {
+    const plan = planStraightening(found.rim, found.ring, OUTPUT_MAX_EDGE / 2);
+    if (!plan) return null;
+    const image = await this.discDetector.warp(fullImageData(canvas), plan.toPhoto, plan.size);
+    return image && { canvas: imageDataToCanvas(image), rim: plan.rim };
   }
 
   protected async shutter(): Promise<void> {
@@ -420,6 +446,33 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   // ── Adjust ────────────────────────────────────────────────────────────
 
   private async enterAdjust(canvas: HTMLCanvasElement): Promise<void> {
+    this.showStill(canvas);
+    this.saveFailed.set(false);
+    this.straightened.set(false);
+
+    const size = canvasSize(canvas);
+    const image = detectionImage(canvas, size);
+    if (this.step()?.mode === 'sleeve') {
+      const quad = await this.detectSleeve(image, size);
+      this.autoDetected.set(!!quad);
+      this.quad.set(quad ? refineSleeve(canvas, quad) : guideFrameQuad(size));
+    } else {
+      const found = await this.detectDisc(image, size);
+      this.autoDetected.set(!!found);
+      const straight = found && (await this.straightenDisc(canvas, found));
+      if (straight) {
+        this.showStill(straight.canvas);
+        this.straightened.set(true);
+        this.circle.set(straight.rim);
+      } else {
+        this.circle.set(found ? clampCircle(found.circle, size) : guideCircle(size));
+      }
+    }
+    this.phase.set('adjust');
+  }
+
+  /** Makes `canvas` the photo being adjusted and cropped. */
+  private showStill(canvas: HTMLCanvasElement): void {
     this.working = canvas;
     const size = canvasSize(canvas);
     const still = this.still().nativeElement;
@@ -427,19 +480,6 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
     still.height = size.height;
     still.getContext('2d')?.drawImage(canvas, 0, 0);
     this.stillSize.set(size);
-    this.saveFailed.set(false);
-
-    const image = detectionImage(canvas, size);
-    if (this.step()?.mode === 'sleeve') {
-      const quad = await this.detectSleeve(image, size);
-      this.autoDetected.set(!!quad);
-      this.quad.set(quad ? refineSleeve(canvas, quad) : guideFrameQuad(size));
-    } else {
-      const circle = await this.detectDisc(image, size);
-      this.autoDetected.set(!!circle);
-      this.circle.set(circle ? clampCircle(circle, size) : guideCircle(size));
-    }
-    this.phase.set('adjust');
   }
 
   protected startDrag(handle: DragHandle, event: PointerEvent): void {
