@@ -17,7 +17,7 @@
           (input)="updateRow(row.key, { title: $any($event.target).value })"
         />
         <select
-          class="w-16 rounded border border-neutral-300 px-1 py-1 text-sm"
+          class="w-12 shrink-0 rounded border border-neutral-300 px-1 py-1 text-sm"
           (change)="selectSide(row, $any($event.target).value)"
           aria-label="Side"
         >
@@ -30,21 +30,13 @@
           <button
             type="button"
             (click)="addSide(row)"
-            class="text-sm text-neutral-500 hover:text-neutral-900"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-neutral-300 text-lg leading-none text-neutral-600 hover:border-neutral-500 hover:text-neutral-900"
             [attr.aria-label]="'Add side ' + side"
             [title]="'Add side ' + side"
           >
             +
           </button>
         }
-        <button
-          type="button"
-          (click)="removeTrack(row.key)"
-          class="text-sm text-red-500 hover:text-red-700"
-          aria-label="Remove track"
-        >
-          ✕
-        </button>
       </div>
 
       <div class="mt-2">
@@ -56,6 +48,17 @@
           (add)="onAddArtist(row, $event)"
           (resetToInherit)="onResetToInherit(row)"
         />
+      </div>
+
+      <div class="mt-2 flex justify-end">
+        <button
+          type="button"
+          (click)="removeTrack(row.key)"
+          class="text-xs text-red-500 hover:text-red-700"
+          aria-label="Remove track"
+        >
+          ✕ Remove track
+        </button>
       </div>
     </div>
   } @empty {
