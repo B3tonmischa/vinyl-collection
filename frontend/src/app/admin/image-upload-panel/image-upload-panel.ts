@@ -13,7 +13,14 @@ import { ToastService } from '../../core/services/toast';
 import { UploadsApiService } from '../../core/services/uploads-api';
 import { DISC_IMAGE_KINDS, VinylImage } from '../../models/vinyl.model';
 import { CameraCaptureData, CameraCaptureDialog } from '../camera-capture/camera-capture-dialog';
-import { ScanStep, discSteps, packagingSteps, slotKey } from '../camera-capture/scan-session.logic';
+import {
+  MAX_DISCS,
+  ScanStep,
+  discCountForSides,
+  discSteps,
+  packagingSteps,
+  slotKey,
+} from '../camera-capture/scan-session.logic';
 
 /** One upload/replace/delete slot per image kind + disc number. */
 @Component({
@@ -24,6 +31,8 @@ import { ScanStep, discSteps, packagingSteps, slotKey } from '../camera-capture/
 export class ImageUploadPanel {
   @Input({ required: true }) vinylId!: number;
   @Input({ required: true }) images!: VinylImage[];
+  /** The release's track sides; a side C or D means a disc 2, and so on. */
+  @Input() sides: readonly string[] = [];
   @Output() imagesChanged = new EventEmitter<void>();
 
   private readonly uploadsApi = inject(UploadsApiService);
@@ -32,7 +41,8 @@ export class ImageUploadPanel {
   private readonly dialog = inject(Dialog);
 
   protected readonly busyKey = signal<string | null>(null);
-  private readonly extraDiscs = signal(0);
+  /** Disc count asked for with "Add another disc". */
+  private readonly requestedDiscs = signal(1);
 
   protected readonly swapMode = signal(false);
   protected readonly swapSelection = signal<ScanStep[]>([]);
@@ -40,20 +50,28 @@ export class ImageUploadPanel {
 
   protected readonly packagingSlots = packagingSteps();
 
+  /**
+   * Discs that get slots (and that a scan starts with): the most of what
+   * the images, the track sides and "Add another disc" call for.
+   */
   protected get discCount(): number {
     const maxFromImages = this.images.reduce(
       (max, img) => (DISC_IMAGE_KINDS.includes(img.kind) ? Math.max(max, img.discNumber) : max),
       1,
     );
-    return Math.max(maxFromImages, 1 + this.extraDiscs());
+    return Math.max(maxFromImages, discCountForSides(this.sides), this.requestedDiscs());
   }
 
   protected get discSlots(): ScanStep[] {
     return discSteps(this.discCount);
   }
 
+  protected get canAddDisc(): boolean {
+    return this.discCount < MAX_DISCS;
+  }
+
   protected addDisc(): void {
-    this.extraDiscs.update((n) => n + 1);
+    if (this.canAddDisc) this.requestedDiscs.set(this.discCount + 1);
   }
 
   protected imageFor(slot: ScanStep): VinylImage | undefined {

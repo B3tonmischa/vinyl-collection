@@ -16,13 +16,27 @@
           [value]="row.title"
           (input)="updateRow(row.key, { title: $any($event.target).value })"
         />
-        <input
-          type="text"
-          placeholder="Side"
-          class="w-16 rounded border border-neutral-300 px-2 py-1 text-sm"
-          [value]="row.side"
-          (input)="updateRow(row.key, { side: $any($event.target).value })"
-        />
+        <select
+          class="w-16 rounded border border-neutral-300 px-1 py-1 text-sm"
+          (change)="selectSide(row, $any($event.target).value)"
+          aria-label="Side"
+        >
+          <option value="" [selected]="!row.side.trim()">–</option>
+          @for (side of sides; track side) {
+            <option [value]="side" [selected]="side === row.side.trim()">{{ side }}</option>
+          }
+        </select>
+        @if (newSide; as side) {
+          <button
+            type="button"
+            (click)="addSide(row)"
+            class="text-sm text-neutral-500 hover:text-neutral-900"
+            [attr.aria-label]="'Add side ' + side"
+            [title]="'Add side ' + side"
+          >
+            +
+          </button>
+        }
         <button
           type="button"
           (click)="removeTrack(row.key)"
