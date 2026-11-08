@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CarouselStateService } from '../../core/services/carousel-state';
 import { VinylsApiService } from '../../core/services/vinyls-api';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
 import { VinylCarouselComponent } from '../vinyl-carousel/vinyl-carousel';
@@ -20,6 +21,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 })
 export class GalleryPage {
   private readonly vinylsApi = inject(VinylsApiService);
+  private readonly carouselState = inject(CarouselStateService);
 
   protected readonly searchInput = signal('');
   private readonly debouncedQuery = signal('');
@@ -27,6 +29,11 @@ export class GalleryPage {
 
   protected readonly hasActiveQuery = computed(() => this.debouncedQuery().trim().length > 0);
   protected readonly listResource = this.vinylsApi.listResource(this.debouncedQuery);
+
+  /** Coming back from a search result's page opens the carousel on that record. */
+  protected rememberRecord(id: number): void {
+    this.carouselState.centeredVinylId = id;
+  }
 
   protected onSearchInput(value: string): void {
     this.searchInput.set(value);

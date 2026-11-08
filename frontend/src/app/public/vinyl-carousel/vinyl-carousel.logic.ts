@@ -18,6 +18,33 @@ export function randomIndex(length: number, rng: () => number = Math.random): nu
 }
 
 /**
+ * Where the carousel opens: on the record last centered if it's still in
+ * the list, otherwise a random one. `restored` says which happened.
+ */
+export function startIndex(
+  ids: readonly number[],
+  rememberedId: number | null,
+  rng: () => number = Math.random,
+): { index: number; restored: boolean } {
+  const found = rememberedId === null ? -1 : ids.indexOf(rememberedId);
+  if (found >= 0) return { index: found, restored: true };
+  return { index: randomIndex(ids.length, rng), restored: false };
+}
+
+/**
+ * Unwrapped slot a "spin again" lands on, starting from the unwrapped
+ * slot `from`: at least `distance` slots further on, on a random record
+ * other than the one at `from` (when there's more than one).
+ */
+export function spinAgainTarget(from: number, length: number, distance: number, rng: () => number = Math.random): number {
+  if (length <= 1) return from + distance;
+  const current = wrapIndex(from, length);
+  let landing = randomIndex(length - 1, rng);
+  if (landing >= current) landing++;
+  return from + distance + wrapIndex(landing - current, length);
+}
+
+/**
  * Duration (ms) of the carousel's roll-in spin on landing. Tweak the
  * constant to adjust the feel. Reduced-motion preference skips the
  * animation entirely (0 = no animation).

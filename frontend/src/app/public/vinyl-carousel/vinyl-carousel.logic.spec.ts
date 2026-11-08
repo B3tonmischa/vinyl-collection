@@ -12,7 +12,9 @@ import {
   spinPositionAt,
   spinSizeAnchors,
   spinSlotStyle,
+  spinAgainTarget,
   spinSlots,
+  startIndex,
   stepDurationMs,
   wrapIndex,
 } from './vinyl-carousel.logic';
@@ -367,5 +369,49 @@ describe('computeWindow', () => {
         expect(indices.length).toBe(Math.min(5, length));
       }
     }
+  });
+});
+
+describe('startIndex', () => {
+  it('restores the remembered record by id, wherever it now sits', () => {
+    expect(startIndex([7, 3, 9], 9)).toEqual({ index: 2, restored: true });
+  });
+
+  it('picks a random record when nothing is remembered', () => {
+    expect(startIndex([7, 3, 9], null, () => 0.5)).toEqual({ index: 1, restored: false });
+  });
+
+  it('picks a random record when the remembered one is gone', () => {
+    expect(startIndex([7, 3, 9], 42, () => 0)).toEqual({ index: 0, restored: false });
+  });
+});
+
+describe('spinAgainTarget', () => {
+  it('travels at least the full spin distance forward', () => {
+    for (const r of [0, 0.3, 0.6, 0.99]) {
+      expect(spinAgainTarget(4, 10, 20, () => r)).toBeGreaterThanOrEqual(24);
+    }
+  });
+
+  it('never lands back on the current record', () => {
+    for (let i = 0; i < 9; i++) {
+      const r = i / 9;
+      expect(wrapIndex(spinAgainTarget(4, 10, 20, () => r), 10)).not.toBe(4);
+    }
+  });
+
+  it('can land on every other record', () => {
+    const landed = new Set<number>();
+    for (let i = 0; i < 9; i++) landed.add(wrapIndex(spinAgainTarget(4, 10, 20, () => i / 9), 10));
+    expect([...landed].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 5, 6, 7, 8, 9]);
+  });
+
+  it('works from an unwrapped (negative or large) slot', () => {
+    expect(wrapIndex(spinAgainTarget(-13, 10, 20, () => 0), 10)).toBe(0);
+    expect(wrapIndex(spinAgainTarget(37, 10, 20, () => 0.99), 10)).toBe(9);
+  });
+
+  it('just spins the distance with a single record', () => {
+    expect(spinAgainTarget(0, 1, 20)).toBe(20);
   });
 });
