@@ -1,0 +1,172 @@
+/*
+ * The record is one 3D object. Inside .sleeve, front to back:
+ *
+ *   .door   z +1px   front cover outside, left inner sleeve inside; hinged on its left edge
+ *   .panel  z  0     right inner sleeve
+ *   .disc   z -1px   and 0.2px further back per disc, so the first disc is on top
+ *   .panel  z -2px   back cover, facing away
+ *
+ * so the discs sit between the covers and turn with the sleeve.
+ *
+ * The component sets --s (sleeve side), --k (fit scale), --gx / --gy
+ * (centring) and --slot (sleeve shift while open); each disc carries --i,
+ * its index. The fractions below mirror the constants in
+ * record-viewer.logic.ts.
+ */
+
+.record {
+  --s: 320px;
+  --k: 1;
+  --gx: 0px;
+  --gy: 0px;
+  --slot: 0px;
+  --move: 600ms cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+.scene {
+  position: relative;
+  height: var(--s);
+  perspective: 1600px;
+}
+
+.group {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--s);
+  height: var(--s);
+  transform-origin: 0 0;
+  transform: translate(var(--gx), var(--gy)) scale(var(--k));
+  transform-style: preserve-3d;
+}
+
+.sleeve {
+  position: absolute;
+  inset: 0;
+  transform: translateX(var(--slot));
+  transform-style: preserve-3d;
+}
+
+/* Turns to the left like a book page, the same way the door opens. */
+.record[data-view='back'] .sleeve {
+  transform: translateX(var(--slot)) rotateY(-180deg);
+}
+
+.panel,
+.door {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.door {
+  transform-origin: left center;
+  transform: translateZ(1px);
+}
+
+.record[data-view='open'] .door {
+  transform: translateZ(1px) rotateY(-180deg);
+}
+
+.face {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  backface-visibility: hidden;
+}
+
+.face.rear {
+  transform: rotateY(180deg);
+}
+
+.panel .face.rear {
+  transform: rotateY(180deg) translateZ(2px);
+}
+
+.disc {
+  position: absolute;
+  left: 0;
+  top: 3%;
+  width: 94%;
+  height: 94%;
+  transform-style: preserve-3d;
+  /* Tucked inside the sleeve. */
+  transform: translateZ(calc(-1px - var(--i) * 0.2px)) translateX(calc(var(--s) * 0.03));
+}
+
+.roll,
+.flip {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+
+/*
+ * A disc rolls rather than slides: it turns by the distance it travels
+ * (offset / radius, radius = 0.47 sleeve sides) and is upright once out.
+ */
+.roll {
+  transform: rotate(calc((-1.01 - var(--i)) / 0.47 * 1rad));
+}
+
+.record[data-view='front'][data-discs='in'] .disc {
+  transform: translateZ(calc(-1px - var(--i) * 0.2px))
+    translateX(calc(var(--s) * (0.5 + 0.22 * var(--i))));
+}
+
+.record[data-view='front'][data-discs='in'] .disc:hover {
+  transform: translateZ(calc(-1px - var(--i) * 0.2px))
+    translateX(calc(var(--s) * (0.54 + 0.22 * var(--i))));
+}
+
+.record[data-view='front'][data-discs='in'] .roll {
+  transform: rotate(calc((-0.54 - 0.78 * var(--i)) / 0.47 * 1rad));
+}
+
+.record[data-discs='out'] .disc {
+  transform: translateZ(calc(-1px - var(--i) * 0.2px))
+    translateX(calc(var(--s) * (1.04 + var(--i))));
+}
+
+.record[data-discs='out'] .roll {
+  transform: rotate(0rad);
+}
+
+.disc.is-flipped .flip {
+  transform: rotateY(180deg);
+}
+
+.side {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+}
+
+.side.side-b {
+  transform: rotateY(180deg);
+}
+
+.record.is-ready .group,
+.record.is-ready .sleeve,
+.record.is-ready .door,
+.record.is-ready .disc,
+.record.is-ready .roll,
+.record.is-ready .flip {
+  transition: transform var(--move);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record.is-ready .group,
+  .record.is-ready .sleeve,
+  .record.is-ready .door,
+  .record.is-ready .disc,
+  .record.is-ready .roll,
+  .record.is-ready .flip {
+    transition: none;
+  }
+}

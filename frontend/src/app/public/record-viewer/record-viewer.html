@@ -1,0 +1,141 @@
+@if (parts().isEmpty) {
+  <p class="text-sm text-neutral-400">No images yet.</p>
+} @else {
+  <div
+    class="record"
+    [class.is-ready]="ready()"
+    [attr.data-view]="view()"
+    [attr.data-discs]="discsOut() ? 'out' : 'in'"
+    [style.--s.px]="layout().size"
+    [style.--k]="layout().scale"
+    [style.--gx.px]="layout().x"
+    [style.--gy.px]="layout().y"
+    [style.--slot.px]="layout().slot"
+  >
+    <div #scene class="scene">
+      <div class="group">
+        <div class="sleeve">
+          @for (disc of parts().discs; track disc.discNumber; let i = $index) {
+            <button
+              type="button"
+              class="disc rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+              [class.is-flipped]="isFlipped(disc)"
+              [class.cursor-pointer]="!discsOut() || canFlip(disc)"
+              [style.--i]="i"
+              [attr.inert]="view() === 'front' ? null : ''"
+              [attr.aria-label]="discLabel(disc)"
+              (click)="onDisc(disc)"
+            >
+              <span class="roll">
+                <span class="flip">
+                  @if (firstSide(disc); as first) {
+                    <span class="side rounded-full bg-neutral-900 shadow-sm">
+                      <img
+                        [src]="url(first.image)"
+                        [alt]="discAlt(disc, first.side)"
+                        class="h-full w-full object-cover"
+                      />
+                    </span>
+                  }
+                  @if (canFlip(disc) && disc.sideB; as sideB) {
+                    <span class="side side-b rounded-full bg-neutral-900 shadow-sm">
+                      <img
+                        [src]="url(sideB)"
+                        [alt]="discAlt(disc, 'B')"
+                        class="h-full w-full object-cover"
+                      />
+                    </span>
+                  }
+                </span>
+              </span>
+            </button>
+          }
+
+          <div class="panel">
+            @if (parts().hasInner) {
+              <button
+                type="button"
+                class="face cursor-pointer bg-neutral-100 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                [attr.inert]="view() === 'open' ? null : ''"
+                [attr.aria-label]="faceLabel('inner-b')"
+                (click)="onFace('inner-b')"
+              >
+                @if (panels().right; as panel) {
+                  <img
+                    [src]="url(panel.image)"
+                    alt="Inner sleeve, right side"
+                    class="h-full object-cover"
+                    [class]="panel.half ? '-ml-[100%] w-[200%] max-w-none' : 'w-full'"
+                    (load)="onInnerLoad($event)"
+                  />
+                }
+              </button>
+            }
+            <button
+              type="button"
+              class="face rear cursor-pointer bg-neutral-100 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+              [attr.inert]="view() === 'back' ? null : ''"
+              [attr.aria-label]="faceLabel('back')"
+              (click)="onFace('back')"
+            >
+              @if (parts().back; as image) {
+                <img [src]="url(image)" alt="Back cover" class="h-full w-full object-cover" />
+              }
+            </button>
+          </div>
+
+          <div class="door">
+            <button
+              type="button"
+              class="face bg-neutral-100 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+              [class.cursor-pointer]="frontIsActionable"
+              [attr.inert]="view() === 'front' ? null : ''"
+              [attr.aria-label]="faceLabel('front')"
+              (click)="onFace('front')"
+            >
+              @if (parts().front; as image) {
+                <img [src]="url(image)" alt="Front cover" class="h-full w-full object-cover" />
+              } @else {
+                <span class="flex h-full w-full items-center justify-center text-neutral-300">
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="h-16 w-16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+                  </svg>
+                </span>
+              }
+            </button>
+            @if (parts().hasInner) {
+              <button
+                type="button"
+                class="face rear cursor-pointer bg-neutral-100 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+                [attr.inert]="view() === 'open' ? null : ''"
+                [attr.aria-label]="faceLabel('inner-a')"
+                (click)="onFace('inner-a')"
+              >
+                @if (panels().left; as panel) {
+                  <img
+                    [src]="url(panel.image)"
+                    alt="Inner sleeve, left side"
+                    class="h-full object-cover"
+                    [class]="panel.half ? 'w-[200%] max-w-none' : 'w-full'"
+                    (load)="onInnerLoad($event)"
+                  />
+                }
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="mt-3 min-h-4 text-center text-xs text-(color:--rec-muted)" aria-live="polite">
+      {{ caption() }}
+    </p>
+  </div>
+}
