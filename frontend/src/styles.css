@@ -3,6 +3,17 @@
 @import 'tailwindcss';
 
 /*
+ * Colours a record's detail page takes from its front cover (see
+ * cover-tint.logic.ts): the page ground, hairlines and secondary text. These
+ * are the neutral defaults; the detail page overrides them per record.
+ */
+:root {
+  --rec-ground: var(--color-white);
+  --rec-line: var(--color-neutral-200);
+  --rec-muted: var(--color-neutral-500);
+}
+
+/*
  * The admin header is sticky, so keep focused fields and page-key scrolling
  * clear of it. Tall enough for the wrapped header on narrow screens (~85px).
  */

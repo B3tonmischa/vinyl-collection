@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { Artist, ReleaseType, Track } from '../../models/vinyl.model';
 import { showsTrackArtists } from './tracklist.logic';
 
+const NO_SIDE = '—';
+
 interface SideGroup {
   side: string;
   tracks: Track[];
@@ -18,10 +20,17 @@ export class TracklistComponent {
   @Input({ required: true }) albumArtists!: Artist[];
   @Input() releaseType: ReleaseType | null = null;
 
+  /** Group key for tracks without a side; that group gets no heading. */
+  protected readonly noSide = NO_SIDE;
+
+  protected trackCount(count: number): string {
+    return count === 1 ? '1 track' : `${count} tracks`;
+  }
+
   protected get sides(): SideGroup[] {
     const groups = new Map<string, Track[]>();
     for (const track of this.tracks) {
-      const key = track.side ?? '—';
+      const key = track.side ?? NO_SIDE;
       const bucket = groups.get(key);
       if (bucket) {
         bucket.push(track);

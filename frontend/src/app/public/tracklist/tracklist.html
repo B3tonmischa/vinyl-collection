@@ -1,18 +1,29 @@
 <div class="space-y-6">
   @for (group of sides; track group.side) {
     <div>
-      <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-        Side {{ group.side }}
-      </h3>
-      <ol class="divide-y divide-neutral-100">
+      @if (group.side !== noSide) {
+        <div class="mb-2 flex items-baseline justify-between gap-4">
+          <h3 class="text-xs font-semibold tracking-wide text-(color:--rec-muted) uppercase">
+            Side {{ group.side }}
+          </h3>
+          <span class="text-xs text-(color:--rec-muted)">{{
+            trackCount(group.tracks.length)
+          }}</span>
+        </div>
+      }
+      <ol class="divide-y divide-(color:--rec-line)">
         @for (track of group.tracks; track track.id) {
           <li class="flex items-baseline justify-between gap-4 py-2">
             <div class="min-w-0">
-              <span class="mr-2 text-sm tabular-nums text-neutral-400">{{ track.position }}</span>
+              <span class="mr-2 text-sm text-(color:--rec-muted) tabular-nums">{{
+                track.position
+              }}</span>
               <span class="text-sm text-neutral-900">{{ track.title }}</span>
             </div>
             @if (showsArtists(track)) {
-              <span class="shrink-0 text-xs text-neutral-500">{{ artistNames(track.effectiveArtists) }}</span>
+              <span class="shrink-0 text-xs text-(color:--rec-muted)">{{
+                artistNames(track.effectiveArtists)
+              }}</span>
             }
           </li>
         }
