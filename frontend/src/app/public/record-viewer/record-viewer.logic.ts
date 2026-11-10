@@ -141,6 +141,15 @@ export const PEEK_OFFSET = 0.5;
 export const PEEK_STEP = 0.22;
 /** Left edge of the first disc once rolled out; each later disc sits one sleeve-width further. */
 export const OUT_OFFSET = 1.04;
+/** Below this much room (a phone) the rolled-out discs are shown one at a time. */
+export const FOCUS_BELOW_PX = 600;
+/** Share of the sleeve that stays in view beside the first disc while it is focused. */
+export const FOCUS_SLEEVE_PEEK = 0.25;
+
+/** Whether there is too little room to show the sleeve and all its discs side by side. */
+export function focusesDiscs(width: number): boolean {
+  return width > 0 && width < FOCUS_BELOW_PX;
+}
 
 export interface RecordLayout {
   /** Sleeve side in px, before scaling. */
@@ -155,14 +164,32 @@ export interface RecordLayout {
   slot: number;
 }
 
-/** Sizes and centres the record for the space it has and the state it is in. */
+/**
+ * Sizes and centres the record for the space it has and the state it is in.
+ *
+ * With `focusedDisc` (an index, on a phone) the rolled-out record is not
+ * shrunk to fit: that disc is centred and everything else runs off the
+ * sides — a quarter of the sleeve stays in view beside the first disc, and
+ * a sliver of each neighbouring disc beside the others.
+ */
 export function recordLayout(
   width: number,
   view: SleeveView,
   discsOut: boolean,
   discCount: number,
+  focusedDisc: number | null = null,
 ): RecordLayout {
   const size = Math.min(MAX_SLEEVE_PX, width * SLEEVE_WIDTH_SHARE);
+  if (focusedDisc !== null && discsOut && view === 'front' && discCount > 0 && size > 0) {
+    const shown = width / (2 * (OUT_OFFSET + DISC_SIZE / 2 - 1 + FOCUS_SLEEVE_PEEK));
+    return {
+      size,
+      scale: shown / size,
+      x: width / 2 - (OUT_OFFSET + focusedDisc + DISC_SIZE / 2) * shown,
+      y: (size - shown) / 2,
+      slot: 0,
+    };
+  }
   let needed: number;
   if (view === 'open') needed = 2 * size;
   else if (view === 'back' || discCount === 0) needed = size;

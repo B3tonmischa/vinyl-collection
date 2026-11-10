@@ -4,6 +4,7 @@ import {
   canFlip,
   discSideLabel,
   innerPanels,
+  focusesDiscs,
   recordLayout,
   recordParts,
   shownSide,
@@ -158,6 +159,14 @@ describe('disc sides', () => {
   });
 });
 
+describe('focusesDiscs', () => {
+  it('is on for a phone-sized space only, once measured', () => {
+    expect(focusesDiscs(380)).toBe(true);
+    expect(focusesDiscs(600)).toBe(false);
+    expect(focusesDiscs(0)).toBe(false);
+  });
+});
+
 describe('recordLayout', () => {
   it('caps the sleeve at 400px and centres the resting record', () => {
     const layout = recordLayout(1000, 'front', false, 1);
@@ -190,7 +199,28 @@ describe('recordLayout', () => {
     expect(recordLayout(300, 'front', false, 1).size).toBeCloseTo(186);
   });
 
-  it('never scales up or divides by zero before it has been measured', () => {
+  it('centres the focused disc on a phone and leaves a quarter of the sleeve in view', () => {
+    const layout = recordLayout(380, 'front', true, 2, 0);
+    const shown = layout.size * layout.scale;
+    expect(shown).toBeCloseTo(380 / 1.52);
+    // right edge of the sleeve
+    expect(layout.x + shown).toBeCloseTo(0.25 * shown);
+    // centre of the first disc
+    expect(layout.x + (1.04 + 0.47) * shown).toBeCloseTo(190);
+  });
+
+  it('slides the next disc into the centre when it is focused', () => {
+    const first = recordLayout(380, 'front', true, 2, 0);
+    const second = recordLayout(380, 'front', true, 2, 1);
+    expect(second.scale).toBeCloseTo(first.scale);
+    expect(first.x - second.x).toBeCloseTo(first.size * first.scale);
+  });
+
+  it('ignores the focused disc while the discs are in the sleeve', () => {
+    expect(recordLayout(380, 'front', false, 2, 0)).toEqual(recordLayout(380, 'front', false, 2));
+  });
+
+  it('never divides by zero before it has been measured', () => {
     expect(recordLayout(0, 'front', false, 1)).toEqual({ size: 0, scale: 1, x: 0, y: 0, slot: 0 });
   });
 });
