@@ -16,6 +16,10 @@ const YELLOW: Rgb = [250, 210, 40];
 const BLUE: Rgb = [20, 60, 160];
 const PAPER: Rgb = [228, 228, 226];
 const BLACK: Rgb = [12, 12, 12];
+const RED: Rgb = [200, 30, 40];
+const GREEN: Rgb = [40, 150, 60];
+/** Off-white paper just colourful enough to count as colour on its own. */
+const CREAM: Rgb = [245, 234, 200];
 
 describe('dominantColor', () => {
   it('finds the hue of a single-colour cover', () => {
@@ -42,8 +46,28 @@ describe('dominantColor', () => {
     expect(dominantColor(pixels([PAPER, 50], [BLACK, 50]))).toBeNull();
   });
 
+  it('lets a small red title on a white sleeve tint the page', () => {
+    // Two reds either side of a hue bucket edge (29° and 32°): judged together.
+    const color = dominantColor(pixels([PAPER, 970], [[210, 40, 30], 15], [[220, 50, 20], 15]));
+    expect(color!.hue).toBeGreaterThan(20);
+    expect(color!.hue).toBeLessThan(40);
+    expect(color!.chroma).toBeGreaterThan(0.15);
+  });
+
+  it('lets a little green lettering on a grey cover tint the page', () => {
+    const color = dominantColor(pixels([PAPER, 60], [BLACK, 36], [GREEN, 4]));
+    expect(color!.hue).toBeGreaterThan(130);
+    expect(color!.hue).toBeLessThan(160);
+  });
+
+  it('prefers a small vivid accent over slightly yellowed paper', () => {
+    const color = dominantColor(pixels([CREAM, 980], [RED, 20]));
+    expect(color!.hue).toBeGreaterThan(15);
+    expect(color!.hue).toBeLessThan(35);
+  });
+
   it('ignores a speck of colour', () => {
-    expect(dominantColor(pixels([PAPER, 98], [YELLOW, 2]))).toBeNull();
+    expect(dominantColor(pixels([PAPER, 995], [YELLOW, 5]))).toBeNull();
   });
 
   it('ignores transparent pixels', () => {
