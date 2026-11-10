@@ -3,6 +3,7 @@
 // the progress strip. Kept free of Angular/DOM so it's unit-testable.
 
 import { DISC_IMAGE_KINDS, ImageKind, PACKAGING_IMAGE_KINDS } from '../../models/vinyl.model';
+import { SQUARE_ONLY, SQUARE_OR_SPREAD } from './camera-capture.logic';
 
 export type CaptureMode = 'sleeve' | 'disc';
 
@@ -38,6 +39,16 @@ const PACKAGING_LABELS: Partial<Record<ImageKind, [label: string, short: string]
 };
 
 export const MAX_DISCS = 10;
+
+/**
+ * Shapes a sleeve photo of this kind can have. A gatefold's inside is one
+ * picture across both halves, so the inner sleeve slots also take the
+ * opened sleeve in a single shot; the viewer spreads a lone wide photo
+ * across both panels (innerPanels in record-viewer.logic.ts).
+ */
+export function sleeveShapes(kind: ImageKind): readonly number[] {
+  return kind === 'INNER_SLEEVE_A' || kind === 'INNER_SLEEVE_B' ? SQUARE_OR_SPREAD : SQUARE_ONLY;
+}
 
 /**
  * Discs needed to hold a release's track sides: A/B on disc 1, C/D on

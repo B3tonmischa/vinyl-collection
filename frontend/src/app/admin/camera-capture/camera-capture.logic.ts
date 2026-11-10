@@ -119,26 +119,38 @@ function cornerAngles(quad: Quad): number[] {
 // What a sleeve shot on purpose can look like (see isPlausibleSleeveQuad).
 const SLEEVE_MIN_AREA_FRACTION = 0.08;
 const SLEEVE_MAX_AREA_FRACTION = 0.95;
+/** Longest side over shortest, for a square shot at a tilt. */
 const SLEEVE_MAX_SIDE_RATIO = 1.6;
 const SLEEVE_MIN_CORNER_DEG = 55;
 const SLEEVE_MAX_CORNER_DEG = 125;
+/**
+ * Shapes a sleeve photo can have, as long side over short: a sleeve is
+ * square, an opened gatefold is two squares side by side.
+ */
+export const SQUARE_ONLY: readonly number[] = [1];
+export const SQUARE_OR_SPREAD: readonly number[] = [1, 2];
 /** Share of the longer image edge that counts as "on the border". */
 const BORDER_MARGIN_FRACTION = 0.012;
 
 /**
  * Rejects detections that can't be a sleeve shot on purpose: too small a
  * share of the frame (a label or a sticker), basically the whole frame
- * (the photo's own border), too far from square even allowing for camera
- * tilt, or corners too sharp/blunt to be a tilted square. Expects ordered
- * corners.
+ * (the photo's own border), longer than the longest of `shapes` even
+ * allowing for camera tilt, or corners too sharp/blunt to be a tilted
+ * rectangle. Expects ordered corners.
  */
-export function isPlausibleSleeveQuad(quad: Quad, frame: Size): boolean {
+export function isPlausibleSleeveQuad(
+  quad: Quad,
+  frame: Size,
+  shapes: readonly number[] = SQUARE_ONLY,
+): boolean {
   const areaFraction = quadArea(quad) / (frame.width * frame.height);
   if (areaFraction < SLEEVE_MIN_AREA_FRACTION || areaFraction > SLEEVE_MAX_AREA_FRACTION) {
     return false;
   }
   const s = sides(quad);
-  if (Math.max(...s) / Math.min(...s) > SLEEVE_MAX_SIDE_RATIO) return false;
+  const maxSideRatio = SLEEVE_MAX_SIDE_RATIO * Math.max(...shapes);
+  if (Math.max(...s) / Math.min(...s) > maxSideRatio) return false;
   const badCorner = (deg: number) => deg < SLEEVE_MIN_CORNER_DEG || deg > SLEEVE_MAX_CORNER_DEG;
   if (cornerAngles(quad).some(badCorner)) return false;
   // A whole side on the image border: the photo's own edge (or floorboards
@@ -239,25 +251,27 @@ const ENCLOSING_MIN_SUPPORT = 0.6;
 const ENCLOSING_MIN_AREA_RATIO = 1.02;
 const ENCLOSING_MAX_AREA_RATIO = 1.7;
 const ENCLOSING_SLACK = 1.03;
-const ENCLOSING_SQUARENESS_LOSS = 0.1;
+const ENCLOSING_SHAPE_LOSS = 0.1;
 const ENCLOSING_MAX_SIDE_TURN_DEG = 2;
 /**
- * How strictly a candidate must be square once perspective is undone.
- * Record sleeves are, so this is what tells the sleeve from the rectangle
- * left when one side lands on a line printed inside the cover.
+ * How strictly a candidate must match an expected shape once perspective
+ * is undone. Record sleeves are square, so this is what tells the sleeve
+ * from the rectangle left when one side lands on a line printed inside
+ * the cover.
  */
-const SQUARENESS_SIGMA = 0.06;
+const SHAPE_SIGMA = 0.06;
 
 /** Edge support dominates both the score and the corner average. */
 function supportWeight(support: number): number {
   return support ** 3;
 }
 
-/** 1 for a true square, falling off as the undistorted shape strays from one. */
-function squareness(quad: Quad, frame: Size): number {
+/** 1 for exactly one of `shapes`, falling off as the undistorted quad strays from all of them. */
+function shapeFit(quad: Quad, frame: Size, shapes: readonly number[]): number {
   const aspect = trueAspect(quad, frame);
-  const off = Math.max(aspect, 1 / aspect) - 1;
-  return Math.exp(-(off * off) / (2 * SQUARENESS_SIGMA * SQUARENESS_SIGMA));
+  const long = Math.max(aspect, 1 / aspect);
+  const off = Math.min(...shapes.map((shape) => Math.abs(long / shape - 1)));
+  return Math.exp(-(off * off) / (2 * SHAPE_SIGMA * SHAPE_SIGMA));
 }
 
 /**
@@ -265,15 +279,19 @@ function squareness(quad: Quad, frame: Size): number {
  * several edge/region maps plus straight-line combinations). Edge support
  * dominates — a real sleeve has a crisp edge on all four sides, while
  * shadows and texture blobs don't — and candidates that several methods
- * agree on get a boost. Among the rest, bigger, squarer and more central
- * (the user aims at the guide) wins. The result is the mean of the
- * agreeing candidates, which also steadies the live outline.
+ * agree on get a boost. Among the rest, bigger, closer to one of `shapes`
+ * and more central (the user aims at the guide) wins. The result is the
+ * mean of the agreeing candidates, which also steadies the live outline.
  */
-export function pickSleeveQuad(candidates: QuadCandidate[], frame: Size): Quad | null {
+export function pickSleeveQuad(
+  candidates: QuadCandidate[],
+  frame: Size,
+  shapes: readonly number[] = SQUARE_ONLY,
+): Quad | null {
   const plausible: SleeveCandidate[] = candidates
     .filter((c) => c.corners.length === 4)
     .map((c) => ({ quad: orderCorners(c.corners), support: c.support }))
-    .filter((c) => isPlausibleSleeveQuad(c.quad, frame));
+    .filter((c) => isPlausibleSleeveQuad(c.quad, frame, shapes));
   if (plausible.length === 0) return null;
 
   const diagonal = Math.hypot(frame.width, frame.height);
@@ -281,14 +299,15 @@ export function pickSleeveQuad(candidates: QuadCandidate[], frame: Size): Quad |
     plausible.filter((c) => quad.every((p, i) => distance(p, c.quad[i]) < tolerance));
 
   const clusterOf = (quad: Quad) => within(quad, diagonal * AGREE_TOLERANCE_FRACTION);
-  const winner = bestScoring(plausible, frame, clusterOf);
-  const sleeve = enclosingSleeve(winner, plausible, frame) ?? winner;
+  const winner = bestScoring(plausible, frame, shapes, clusterOf);
+  const sleeve = enclosingSleeve(winner, plausible, frame, shapes) ?? winner;
   return weightedMean(within(sleeve, diagonal * AVERAGE_TOLERANCE_FRACTION));
 }
 
 function bestScoring(
   candidates: SleeveCandidate[],
   frame: Size,
+  shapes: readonly number[],
   clusterOf: (quad: Quad) => SleeveCandidate[],
 ): Quad {
   const diag = Math.hypot(frame.width, frame.height);
@@ -302,7 +321,7 @@ function bestScoring(
       supportWeight(support) *
       agreement *
       Math.sqrt(areaFraction) *
-      squareness(quad, frame) *
+      shapeFit(quad, frame, shapes) *
       centrality
     );
   };
@@ -328,9 +347,14 @@ function bestScoring(
  * the outline a rectangle, and a printed frame runs parallel to the sleeve's
  * edge where a crease or a shelf behind it rarely does.
  */
-function enclosingSleeve(winner: Quad, candidates: SleeveCandidate[], frame: Size): Quad | null {
+function enclosingSleeve(
+  winner: Quad,
+  candidates: SleeveCandidate[],
+  frame: Size,
+  shapes: readonly number[],
+): Quad | null {
   const winnerArea = quadArea(winner);
-  const winnerSquareness = squareness(winner, frame);
+  const winnerFit = shapeFit(winner, frame, shapes);
   const encloses = ({ quad, support }: SleeveCandidate) => {
     const area = quadArea(quad);
     const slack = expandQuad(quad, ENCLOSING_SLACK);
@@ -340,7 +364,7 @@ function enclosingSleeve(winner: Quad, candidates: SleeveCandidate[], frame: Siz
       area < winnerArea * ENCLOSING_MAX_AREA_RATIO &&
       winner.every((p) => pointInQuad(p, slack)) &&
       sidesParallel(quad, winner) &&
-      squareness(quad, frame) >= winnerSquareness - ENCLOSING_SQUARENESS_LOSS
+      shapeFit(quad, frame, shapes) >= winnerFit - ENCLOSING_SHAPE_LOSS
     );
   };
   const [best] = candidates.filter(encloses).sort((a, b) => quadArea(b.quad) - quadArea(a.quad));
@@ -368,10 +392,37 @@ function weightedMean(cluster: SleeveCandidate[]): Quad {
   return [0, 1, 2, 3].map((i) => ({ x: mean(i, 'x'), y: mean(i, 'y') })) as Quad;
 }
 
-/** Edge length of the square a sleeve quad gets warped to. */
-export function squareOutputSize(quad: Quad, maxEdge = OUTPUT_MAX_EDGE): number {
-  const mean = sides(quad).reduce((a, b) => a + b, 0) / 4;
-  return Math.max(1, Math.round(Math.min(maxEdge, mean)));
+/**
+ * Size a sleeve quad gets warped to: whichever of `shapes` it is nearest
+ * once perspective is undone (the estimate is too rough to use as is),
+ * lying the way the quad does. A square's edge is the quad's mean side; a
+ * longer shape keeps the length of the quad's long sides.
+ */
+export function sleeveOutputSize(
+  quad: Quad,
+  frame: Size,
+  shapes: readonly number[] = SQUARE_ONLY,
+  maxEdge = OUTPUT_MAX_EDGE,
+): Size {
+  const [top, right, bottom, left] = sides(quad);
+  const across = (top + bottom) / 2;
+  const down = (left + right) / 2;
+  const edge = (length: number) => Math.max(1, Math.round(Math.min(maxEdge, length)));
+  const measured = trueAspect(quad, frame);
+  // Dragged corners can make an outline no camera would see a rectangle as.
+  const aspect = Number.isFinite(measured) && measured > 0 ? measured : across / down;
+  const long = Math.max(aspect, 1 / aspect);
+  const off = (shape: number) => Math.abs(Math.log(long / shape));
+  const shape = shapes.reduce((best, s) => (off(s) < off(best) ? s : best));
+  if (shape === 1) {
+    const side = edge((across + down) / 2);
+    return { width: side, height: side };
+  }
+  const longEdge = edge(Math.max(across, down));
+  const shortEdge = Math.max(1, Math.round(longEdge / shape));
+  return aspect >= 1
+    ? { width: longEdge, height: shortEdge }
+    : { width: shortEdge, height: longEdge };
 }
 
 /** The square guide shown in the viewfinder — also the no-detection fallback crop. */

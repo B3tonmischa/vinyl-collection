@@ -23,7 +23,8 @@ import {
   Quad,
   scaleCircle,
   scalePoints,
-  squareOutputSize,
+  sleeveOutputSize,
+  SQUARE_OR_SPREAD,
   trueAspect,
   steadyDisc,
 } from './camera-capture.logic';
@@ -158,14 +159,51 @@ describe('isPlausibleSleeveQuad', () => {
   });
 });
 
-describe('squareOutputSize', () => {
-  it('uses the mean side length', () => {
-    expect(squareOutputSize(square)).toBe(600);
+describe('sleeveOutputSize', () => {
+  const spread: Quad = [
+    { x: 100, y: 200 },
+    { x: 900, y: 200 },
+    { x: 900, y: 600 },
+    { x: 100, y: 600 },
+  ];
+  const upright = orderCorners(spread.map((p) => ({ x: p.y + 100, y: p.x - 100 })));
+
+  it('makes a square of the mean side length', () => {
+    expect(sleeveOutputSize(square, frame)).toEqual({ width: 600, height: 600 });
   });
 
   it('caps at the backend maximum', () => {
-    const huge = scalePoints(square, { width: 1, height: 1 }, { width: 10, height: 10 });
-    expect(squareOutputSize(huge)).toBe(2000);
+    const big = { width: 10000, height: 8000 };
+    expect(sleeveOutputSize(scalePoints(square, frame, big), big)).toEqual({
+      width: 2000,
+      height: 2000,
+    });
+    expect(sleeveOutputSize(scalePoints(spread, frame, big), big, SQUARE_OR_SPREAD)).toEqual({
+      width: 2000,
+      height: 1000,
+    });
+  });
+
+  it('squares a wide outline where only squares are expected', () => {
+    expect(sleeveOutputSize(spread, frame)).toEqual({ width: 600, height: 600 });
+  });
+
+  it('keeps an opened sleeve twice as wide as it is tall', () => {
+    expect(sleeveOutputSize(spread, frame, SQUARE_OR_SPREAD)).toEqual({ width: 800, height: 400 });
+  });
+
+  it('snaps a roughly drawn opened sleeve to two squares', () => {
+    const rough = [spread[0], spread[1], { x: 900, y: 640 }, { x: 100, y: 630 }] as Quad;
+    const { width, height } = sleeveOutputSize(rough, frame, SQUARE_OR_SPREAD);
+    expect(width).toBe(height * 2);
+  });
+
+  it('keeps an opened sleeve shot on its side upright', () => {
+    expect(sleeveOutputSize(upright, frame, SQUARE_OR_SPREAD)).toEqual({ width: 400, height: 800 });
+  });
+
+  it('still squares a single sleeve where an opened one is allowed', () => {
+    expect(sleeveOutputSize(square, frame, SQUARE_OR_SPREAD)).toEqual({ width: 600, height: 600 });
   });
 });
 
@@ -296,6 +334,44 @@ describe('pickSleeveQuad', () => {
 
   it('orders the corners of the winner', () => {
     expect(pickSleeveQuad([{ corners: shuffled(square), support: 0.9 }], frame)).toEqual(square);
+  });
+
+  describe('with an opened sleeve allowed', () => {
+    const spread: Quad = [
+      { x: 100, y: 200 },
+      { x: 900, y: 200 },
+      { x: 900, y: 600 },
+      { x: 100, y: 600 },
+    ];
+    const leftHalf: Quad = [spread[0], { x: 500, y: 200 }, { x: 500, y: 600 }, spread[3]];
+    /** The pick among equally well supported outlines, to the nearest pixel. */
+    const pick = (...quads: Quad[]) =>
+      pickSleeveQuad(
+        quads.map((corners) => ({ corners, support: 0.9 })),
+        frame,
+        SQUARE_OR_SPREAD,
+      )?.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+
+    it('ignores the opened sleeve on a step that expects a square', () => {
+      expect(pickSleeveQuad([{ corners: spread, support: 0.9 }], frame)).toBeNull();
+    });
+
+    it('finds the opened sleeve', () => {
+      expect(pick(shuffled(spread) as Quad)).toEqual(spread);
+    });
+
+    it('prefers the whole opened sleeve to one half of it', () => {
+      expect(pick(leftHalf, spread)).toEqual(spread);
+    });
+
+    it('still finds a single sleeve', () => {
+      expect(pick(square)).toEqual(square);
+    });
+
+    it('passes over a shape between a sleeve and an opened one', () => {
+      const between: Quad = [spread[0], { x: 700, y: 200 }, { x: 700, y: 600 }, spread[3]];
+      expect(pick(between, leftHalf)).toEqual(leftHalf);
+    });
   });
 
   it('prefers a crisp outline over a bigger blurry one (e.g. the shadow)', () => {
