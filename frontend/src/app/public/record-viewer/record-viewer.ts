@@ -18,6 +18,7 @@ import {
   SleeveView,
   canFlip,
   discSideLabel,
+  focusesDiscs,
   innerPanels,
   recordLayout,
   recordParts,
@@ -36,7 +37,9 @@ const VIEW_NAMES: Record<SleeveView, string> = {
  * peeking out of the right edge.
  *
  * Clicking a disc rolls every disc out beside the sleeve; clicking one that
- * is out turns it over. Clicking the cover opens the gatefold (or turns to
+ * is out turns it over. On a phone the discs come out one at a time: the
+ * first is centred with the sleeve pushed mostly off the side, and clicking
+ * a neighbouring disc slides that one into the centre instead. Clicking the cover opens the gatefold (or turns to
  * the back cover when there are no inner sleeves); the left inner sleeve
  * closes it, the right one closes it and turns to the back cover.
  *
@@ -72,6 +75,12 @@ export class RecordViewerComponent {
     computation: () => new Set<number>(),
   });
 
+  /** Index of the disc in the centre while the discs are out on a phone. */
+  private readonly focused = linkedSignal<number, number>({
+    source: this.vinylId,
+    computation: () => 0,
+  });
+
   /** Width / height of a lone inner sleeve photo, known once it has loaded. */
   private readonly soloInnerAspect = linkedSignal<number, number | null>({
     source: this.vinylId,
@@ -83,15 +92,28 @@ export class RecordViewerComponent {
   /** Off for the first paint so the record doesn't animate into its resting place. */
   protected readonly ready = signal(false);
 
+  /** The centred disc's index while the discs are out one at a time, else null. */
+  private readonly focusedDisc = computed(() =>
+    this.discsOut() && focusesDiscs(this.width()) ? this.focused() : null,
+  );
+
   protected readonly layout = computed(() =>
-    recordLayout(this.width(), this.view(), this.discsOut(), this.parts().discs.length),
+    recordLayout(
+      this.width(),
+      this.view(),
+      this.discsOut(),
+      this.parts().discs.length,
+      this.focusedDisc(),
+    ),
   );
 
   protected readonly caption = computed(() => {
     const { discs } = this.parts();
     if (this.discsOut()) {
       const flipped = this.flipped();
+      const focused = this.focusedDisc();
       return discs
+        .filter((_, index) => focused === null || index === focused)
         .map((disc) => discSideLabel(disc, flipped.has(disc.discNumber), discs.length))
         .join(' · ');
     }
@@ -144,9 +166,16 @@ export class RecordViewerComponent {
     }
   }
 
-  protected discLabel(disc: RecordDisc): string {
+  /** Whether a click on this disc brings it to the centre rather than turning it over. */
+  protected bringsToCentre(index: number): boolean {
+    const focused = this.focusedDisc();
+    return focused !== null && focused !== index;
+  }
+
+  protected discLabel(disc: RecordDisc, index: number): string {
     if (!this.discsOut()) return 'Take the discs out of the sleeve';
     const name = discSideLabel(disc, this.isFlipped(disc), this.parts().discs.length);
+    if (this.bringsToCentre(index)) return `Show ${name}`;
     return canFlip(disc) ? `${name}. Turn over` : name;
   }
 
@@ -182,9 +211,14 @@ export class RecordViewerComponent {
     this.view.set(viewAfterFaceClick(face, this.parts()));
   }
 
-  protected onDisc(disc: RecordDisc): void {
+  protected onDisc(disc: RecordDisc, index: number): void {
     if (!this.discsOut()) {
+      this.focused.set(0);
       this.discsOut.set(true);
+      return;
+    }
+    if (this.bringsToCentre(index)) {
+      this.focused.set(index);
       return;
     }
     if (!canFlip(disc)) return;

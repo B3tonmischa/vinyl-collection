@@ -8,9 +8,12 @@
     >
   </div>
 } @else if (detailResource.value(); as vinyl) {
-  <!-- The page takes its ground, hairlines and secondary text colour from the front cover. -->
+  <!--
+    The page takes its ground, hairlines and secondary text colour from the front cover.
+    It clips sideways because on a phone the record viewer runs off both edges.
+  -->
   <div
-    class="min-h-dvh bg-(--rec-ground) transition-colors duration-300"
+    class="min-h-dvh overflow-x-clip bg-(--rec-ground) transition-colors duration-300"
     [style.--rec-ground]="tint()?.ground"
     [style.--rec-line]="tint()?.line"
     [style.--rec-muted]="tint()?.muted"

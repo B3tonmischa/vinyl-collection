@@ -20,11 +20,11 @@
               type="button"
               class="disc rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
               [class.is-flipped]="isFlipped(disc)"
-              [class.cursor-pointer]="!discsOut() || canFlip(disc)"
+              [class.cursor-pointer]="!discsOut() || bringsToCentre(i) || canFlip(disc)"
               [style.--i]="i"
               [attr.inert]="view() === 'front' ? null : ''"
-              [attr.aria-label]="discLabel(disc)"
-              (click)="onDisc(disc)"
+              [attr.aria-label]="discLabel(disc, i)"
+              (click)="onDisc(disc, i)"
             >
               <span class="roll">
                 <span class="flip">

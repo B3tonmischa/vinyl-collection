@@ -9,7 +9,8 @@
  * so the discs sit between the covers and turn with the sleeve.
  *
  * The component sets --s (sleeve side), --k (fit scale), --gx / --gy
- * (centring) and --slot (sleeve shift while open); each disc carries --i,
+ * (centring — on a phone with the discs out, --gx instead puts one disc in
+ * the middle and lets the rest run off the sides) and --slot (sleeve shift while open); each disc carries --i,
  * its index. The fractions below mirror the constants in
  * record-viewer.logic.ts.
  */
