@@ -570,10 +570,13 @@ function spanCoverage(line, p, q) {
   return samples === 0 ? 0 : Math.abs(hits[to] - hits[from]) / samples;
 }
 
-/** Tilted-square test for ordered corners; see the LINE_QUAD_ constants. */
-function plausibleShape(q) {
+/**
+ * Tilted-square test for ordered corners; see the LINE_QUAD_ constants.
+ * `maxShape` is the longest shape allowed, long side over short (1 = square).
+ */
+function plausibleShape(q, maxShape) {
   const sides = q.map((p, i) => Math.hypot(q[(i + 1) % 4].x - p.x, q[(i + 1) % 4].y - p.y));
-  if (Math.max(...sides) > Math.min(...sides) * LINE_QUAD_MAX_SIDE_RATIO) return false;
+  if (Math.max(...sides) > Math.min(...sides) * LINE_QUAD_MAX_SIDE_RATIO * maxShape) return false;
   return q.every((p, i) => {
     const a = q[(i + 3) % 4];
     const b = q[(i + 1) % 4];
@@ -594,7 +597,7 @@ function plausibleShape(q) {
  * side lies on an edge (cheap, thanks to lineCoverage) and only the best
  * go on to full scoring.
  */
-function quadsFromLines(edges, size, grad, track) {
+function quadsFromLines(edges, size, grad, maxShape, track) {
   const minSide = Math.min(size.width, size.height);
   const lines = detectLines(edges, size, track);
   for (const line of lines) line.coverage = lineCoverage(line, grad);
@@ -633,7 +636,7 @@ function quadsFromLines(edges, size, grad, track) {
       if (coverage < MIN_LINE_SIDE_COVERAGE) continue;
       const ordered = orderClockwise(corners);
       const area = polygonArea(ordered);
-      if (area < minArea || !plausibleShape(ordered)) continue;
+      if (area < minArea || !plausibleShape(ordered, maxShape)) continue;
       ranked.push({ ordered, rank: coverage ** 3 * area });
     }
   }
@@ -645,9 +648,10 @@ function quadsFromLines(edges, size, grad, track) {
 
 /**
  * Candidate sleeve outlines: { corners (unordered), support (0–1) },
- * strongest first; may be empty.
+ * strongest first; may be empty. `maxShape` is the longest shape worth
+ * proposing, long side over short: 1 for a sleeve, 2 for an opened gatefold.
  */
-function detectQuads(imageData) {
+function detectQuads(imageData, maxShape = 1) {
   return withMats((track) => {
     const src = track(cv.matFromImageData(imageData));
     const size = { width: imageData.width, height: imageData.height };
@@ -672,7 +676,7 @@ function detectQuads(imageData) {
       }
     }
     const grad = gradients(src, track);
-    quads.push(...quadsFromLines(lineEdges, size, grad, track));
+    quads.push(...quadsFromLines(lineEdges, size, grad, maxShape, track));
 
     return quads
       .map((corners) => ({ corners, support: edgeSupport(orderClockwise(corners), grad) }))
@@ -682,8 +686,8 @@ function detectQuads(imageData) {
   });
 }
 
-/** Perspective-warps `quad` (TL, TR, BR, BL) to a size×size square. */
-function warp(imageData, quad, size) {
+/** Perspective-warps `quad` (TL, TR, BR, BL) to a width×height rectangle. */
+function warp(imageData, quad, width, height) {
   return withMats((track) => {
     const src = track(cv.matFromImageData(imageData));
     const from = track(
@@ -694,19 +698,21 @@ function warp(imageData, quad, size) {
         quad.flatMap((p) => [p.x, p.y]),
       ),
     );
-    const to = track(cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, size, 0, size, size, 0, size]));
+    const to = track(
+      cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, width, 0, width, height, 0, height]),
+    );
     const m = track(cv.getPerspectiveTransform(from, to));
     const out = track(new cv.Mat());
     cv.warpPerspective(
       src,
       out,
       m,
-      new cv.Size(size, size),
+      new cv.Size(width, height),
       cv.INTER_LINEAR,
       cv.BORDER_REPLICATE,
       new cv.Scalar(),
     );
-    return new ImageData(new Uint8ClampedArray(out.data), size, size);
+    return new ImageData(new Uint8ClampedArray(out.data), width, height);
   });
 }
 
@@ -716,9 +722,11 @@ self.onmessage = async (event) => {
     await loadOpenCv();
     let result;
     if (type === 'init') result = true;
-    else if (type === 'detectQuads') result = detectQuads(event.data.image);
-    else if (type === 'warp') result = warp(event.data.image, event.data.quad, event.data.size);
-    else throw new Error(`Unknown request type: ${type}`);
+    else if (type === 'detectQuads') result = detectQuads(event.data.image, event.data.maxShape);
+    else if (type === 'warp') {
+      const { image, quad, width, height } = event.data;
+      result = warp(image, quad, width, height);
+    } else throw new Error(`Unknown request type: ${type}`);
     const transfer = result instanceof ImageData ? [result.data.buffer] : [];
     self.postMessage({ id, result }, transfer);
   } catch (err) {

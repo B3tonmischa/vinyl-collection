@@ -15,7 +15,6 @@ import {
   discOutputSize,
   fitSize,
   quadBounds,
-  squareOutputSize,
 } from './camera-capture.logic';
 
 export function canvasSize(canvas: HTMLCanvasElement): Size {
@@ -115,17 +114,17 @@ export function imageDataToJpegFile(image: ImageData, name: string): Promise<Fil
 
 /**
  * Fallback when OpenCV couldn't load: crop the quad's bounding box and
- * squash it to a square. No perspective correction, but still usable.
+ * squash it to `size`. No perspective correction, but still usable.
  */
 export function cropSleeveWithoutWarp(
   working: HTMLCanvasElement,
   quad: Quad,
+  size: Size,
   name: string,
 ): Promise<File> {
   const b = quadBounds(quad, canvasSize(working));
-  const size = squareOutputSize(quad);
-  const [canvas, ctx] = newCanvas({ width: size, height: size });
-  ctx.drawImage(working, b.x, b.y, b.width, b.height, 0, 0, size, size);
+  const [canvas, ctx] = newCanvas(size);
+  ctx.drawImage(working, b.x, b.y, b.width, b.height, 0, 0, size.width, size.height);
   return canvasToFile(canvas, name, 'jpeg');
 }
 

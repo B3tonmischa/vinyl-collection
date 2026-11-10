@@ -33,7 +33,7 @@ import {
   quadPoints,
   scaleCircle,
   scalePoints,
-  squareOutputSize,
+  sleeveOutputSize,
   steadyDisc,
 } from './camera-capture.logic';
 import {
@@ -58,6 +58,7 @@ import {
   StepStatus,
   discSide,
   nextPendingIndex,
+  sleeveShapes,
   slotKey,
   withStatus,
 } from './scan-session.logic';
@@ -118,7 +119,8 @@ function refineSleeve(canvas: HTMLCanvasElement, quad: Quad): Quad {
  * and, once a detector is ready, the live detection drawn on top) → still
  * photo with an auto-detected, draggable crop → cropped File handed to
  * data.onCapture for upload. Sleeves get perspective-corrected to a
- * square JPEG; discs are cut round into a PNG with transparent corners.
+ * square JPEG (an opened gatefold, on the inner sleeve steps, to one twice
+ * as wide); discs are cut round into a PNG with transparent corners.
  *
  * Needs a secure context for getUserMedia (prod is HTTPS via Cloudflare;
  * see `npm run start:lan` for phones in dev). Without a camera it still
@@ -225,10 +227,23 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
           : 'Check the corners sit on the corners of the sleeve.';
       default:
         if (!step) return null;
-        return step.mode === 'disc'
-          ? `Lay the record flat, side ${discSide(step.kind)} up, and fit it in the circle.`
+        if (step.mode === 'disc') {
+          return `Lay the record flat, side ${discSide(step.kind)} up, and fit it in the circle.`;
+        }
+        return this.shapes().length > 1
+          ? `Lay the ${step.label.toLowerCase()} flat and fit it in the square, or open the sleeve out and get both halves in the picture.`
           : `Lay the ${step.label.toLowerCase()} flat and fit it in the square.`;
     }
+  });
+
+  /** Shapes the current sleeve step's photo can have. */
+  private readonly shapes = computed(() => sleeveShapes(this.step()?.kind ?? 'COVER_FRONT'));
+  /** The outline on the adjust screen is an opened sleeve, saved as one wide picture. */
+  protected readonly isSpread = computed(() => {
+    const quad = this.quad();
+    if (!quad || this.step()?.mode !== 'sleeve') return false;
+    const { width, height } = sleeveOutputSize(quad, this.stillSize(), this.shapes());
+    return width !== height;
   });
 
   protected readonly guideQuad = computed(() => {
@@ -377,8 +392,9 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
   /** The sleeve outline in `target` pixel space, or null. */
   private async detectSleeve(image: ImageData, target: Size): Promise<Quad | null> {
     const detSize = { width: image.width, height: image.height };
-    const candidates = await this.detector.detectQuads(image);
-    const quad = candidates ? pickSleeveQuad(candidates, detSize) : null;
+    const shapes = this.shapes();
+    const candidates = await this.detector.detectQuads(image, Math.max(...shapes));
+    const quad = candidates ? pickSleeveQuad(candidates, detSize, shapes) : null;
     return quad ? scalePoints(quad, detSize, target) : null;
   }
 
@@ -601,10 +617,11 @@ export class CameraCaptureDialog implements OnInit, OnDestroy {
       return cropDiscToPngFile(working, this.circle() ?? guideCircle(size), 'disc');
     }
     const quad = this.quad() ?? guideFrameQuad(size);
-    const warped = await this.detector.warp(fullImageData(working), quad, squareOutputSize(quad));
+    const output = sleeveOutputSize(quad, size, sleeveShapes(step.kind));
+    const warped = await this.detector.warp(fullImageData(working), quad, output);
     return warped
       ? imageDataToJpegFile(warped, 'sleeve')
-      : cropSleeveWithoutWarp(working, quad, 'sleeve');
+      : cropSleeveWithoutWarp(working, quad, output, 'sleeve');
   }
 
   // ── Steps ─────────────────────────────────────────────────────────────

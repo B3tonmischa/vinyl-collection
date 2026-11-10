@@ -229,6 +229,9 @@
                   ? 'Edges detected — drag the corners to fine-tune.'
                   : "Couldn't find the edges — drag the corners onto the sleeve's corners."
               }}
+              @if (isSpread()) {
+                Saved as one picture of the opened sleeve.
+              }
             } @else {
               {{
                 straightened()
