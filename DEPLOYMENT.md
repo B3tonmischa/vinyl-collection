@@ -255,6 +255,11 @@ card/SSD — a cron job pushing it to another machine or cloud storage,
 even just occasionally, is the difference between "annoying" and
 "catastrophic" if the Pi's storage fails.
 
+Deleting an image or a record in the admin only hides it, so Undo can
+bring it back. The backend removes the files of anything deleted more
+than 30 days ago, at startup and once a day — a backup is the only way
+back after that.
+
 ## Updating
 
 ```bash

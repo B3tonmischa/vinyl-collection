@@ -4,10 +4,12 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
-import { mkdir, rename, unlink } from 'fs/promises';
-import { randomUUID } from 'crypto';
-import { join } from 'path';
+import { mkdir, unlink } from 'fs/promises';
+import { randomBytes } from 'crypto';
+import { join, resolve, sep } from 'path';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { ImageKind } from '../../generated/prisma/client';
@@ -36,7 +38,7 @@ sharp.cache(false);
 // Windows (and sometimes macOS, via antivirus/indexer/search) can also hold
 // a brief, unrelated exclusive lock on a just-written file for a few tens
 // of milliseconds after it's closed, which surfaces as EPERM/EBUSY/EACCES
-// on an immediately-following write, rename, or unlink of that same path.
+// on an immediately-following unlink of that same path.
 // This never happens on Linux/POSIX, so it doesn't reproduce in this
 // sandbox. Retrying briefly is a safe no-op everywhere else and covers
 // that case in addition to the sharp-cache fix above.
@@ -107,11 +109,31 @@ function normalizeDiscNumber(kind: ImageKind, requested: number): number {
   return PACKAGING_KINDS.has(kind) ? 1 : requested;
 }
 
+/** How long a deleted image (or a deleted record's images) stays on disk. */
+export const DELETED_IMAGE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 @Injectable()
-export class UploadsService {
+export class UploadsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UploadsService.name);
+  private purgeTimer: NodeJS.Timeout | undefined;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit() {
+    const purge = () =>
+      this.purgeExpired().catch((err) =>
+        this.logger.warn(`Purging deleted images failed: ${(err as Error).message}`),
+      );
+    void purge();
+    this.purgeTimer = setInterval(purge, PURGE_INTERVAL_MS);
+    // Never the reason the process stays alive.
+    this.purgeTimer.unref();
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.purgeTimer);
+  }
 
   async saveImage(
     vinylId: number,
@@ -127,7 +149,7 @@ export class UploadsService {
     }
 
     // Anything sharp can't read is the client's mistake (400), not a
-    // server error — checked before a directory or temp file is created.
+    // server error — checked before a directory or file is created.
     try {
       await sharp(file.buffer).metadata();
     } catch {
@@ -136,63 +158,115 @@ export class UploadsService {
 
     const kind = SLUG_TO_KIND[kindSlug];
     const discNumber = normalizeDiscNumber(kind, requestedDiscNumber);
-    const dir = join(getUploadsRoot(), String(vinylId));
-    await mkdir(dir, { recursive: true });
+    await mkdir(join(getUploadsRoot(), String(vinylId)), { recursive: true });
 
-    const fullFilename = `${kindSlug}-${discNumber}-full.webp`;
-    const thumbFilename = `${kindSlug}-${discNumber}-thumb.webp`;
-    const fullDest = join(dir, fullFilename);
-    const thumbDest = join(dir, thumbFilename);
-
-    // Write to a uniquely-named temp file in the same directory first, then
-    // atomically rename into place, instead of having sharp().toFile() write
-    // directly to a path that may already exist (the re-upload/overwrite
-    // case). That's the scenario where a transient lock on the destination
-    // path — held for a moment by e.g. Windows Defender/indexer right after
-    // a previous write closed — would otherwise turn into a failed write.
-    const tmpFull = join(dir, `.tmp-${randomUUID()}-${fullFilename}`);
-    const tmpThumb = join(dir, `.tmp-${randomUUID()}-${thumbFilename}`);
+    // Every upload gets file names of its own; nothing on disk is ever
+    // written twice. That matters three ways:
+    //  - swapImages() moves file references between rows, so a name
+    //    derived from the slot alone could belong to the *other* slot by
+    //    now, and re-uploading would overwrite that slot's picture.
+    //  - what a URL serves never changes, so it can be cached for good
+    //    (see uploads-serve.controller.ts).
+    //  - there is no existing file to rename over, which was the fragile
+    //    step on Windows.
+    const token = randomBytes(6).toString('hex');
+    const fullPath = `${vinylId}/${kindSlug}-${discNumber}-${token}-full.webp`;
+    const thumbPath = `${vinylId}/${kindSlug}-${discNumber}-${token}-thumb.webp`;
 
     try {
-      // Full size: capped so scans don't bloat storage, but plenty for a lightbox.
-      await sharp(file.buffer)
-        .rotate() // respect EXIF orientation coming off the scanner
-        .resize({
-          width: FULL_MAX_DIMENSION,
-          height: FULL_MAX_DIMENSION,
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .webp({ quality: 85 })
-        .toFile(tmpFull);
-
-      // Thumbnail: for the public grid view.
-      await sharp(file.buffer)
-        .rotate()
-        .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toFile(tmpThumb);
-
-      await withTransientFsRetry(() => rename(tmpFull, fullDest));
-      await withTransientFsRetry(() => rename(tmpThumb, thumbDest));
+      // One decode feeds both sizes. rotate() respects the EXIF
+      // orientation coming off the scanner.
+      const source = sharp(file.buffer).rotate();
+      await Promise.all([
+        // Full size: capped so scans don't bloat storage, but plenty for a lightbox.
+        source
+          .clone()
+          .resize({
+            width: FULL_MAX_DIMENSION,
+            height: FULL_MAX_DIMENSION,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .webp({ quality: 85 })
+          .toFile(join(getUploadsRoot(), fullPath)),
+        // Thumbnail: for the public grid view.
+        source
+          .clone()
+          .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toFile(join(getUploadsRoot(), thumbPath)),
+      ]);
     } catch (err) {
-      await Promise.allSettled([unlink(tmpFull), unlink(tmpThumb)]);
+      await this.removeFiles([fullPath, thumbPath]);
       // The detail (paths, libvips internals) goes to the log, not the client.
       this.logger.error(`Failed to process image for vinyl ${vinylId}`, (err as Error).stack);
       throw new InternalServerErrorException('Failed to process image');
     }
 
-    const fullPath = `${vinylId}/${fullFilename}`;
-    const thumbPath = `${vinylId}/${thumbFilename}`;
-
     // One image per kind per disc per vinyl — re-uploading replaces it, and
     // if this slot was previously soft-deleted, clears that too (a fresh
     // upload always brings the slot back to life).
-    return this.prisma.vinylImage.upsert({
-      where: { vinylId_kind_discNumber: { vinylId, kind, discNumber } },
-      update: { fullPath, thumbPath, deletedAt: null },
-      create: { vinylId, kind, discNumber, fullPath, thumbPath },
+    const slot = { vinylId_kind_discNumber: { vinylId, kind, discNumber } };
+    try {
+      const previous = await this.prisma.vinylImage.findUnique({ where: slot });
+      const saved = await this.prisma.vinylImage.upsert({
+        where: slot,
+        update: { fullPath, thumbPath, deletedAt: null },
+        create: { vinylId, kind, discNumber, fullPath, thumbPath },
+      });
+      // The files this slot pointed at until now belong to nothing anymore.
+      if (previous) {
+        await this.removeFiles([previous.fullPath, previous.thumbPath]);
+      }
+      return saved;
+    } catch (err) {
+      await this.removeFiles([fullPath, thumbPath]);
+      throw err;
+    }
+  }
+
+  /**
+   * Removes, for good, images whose slot — or whose whole record — was
+   * deleted longer ago than the retention period: the files and the image
+   * rows. Deleting only ever hides things (so Undo can bring them back),
+   * which otherwise leaves every deleted scan on disk forever. A deleted
+   * record's own row is kept; only its pictures go.
+   *
+   * Runs at startup and once a day. Returns how many images were purged.
+   */
+  async purgeExpired(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - DELETED_IMAGE_RETENTION_MS);
+    const expired = await this.prisma.vinylImage.findMany({
+      where: {
+        OR: [{ deletedAt: { lt: cutoff } }, { vinyl: { deletedAt: { lt: cutoff } } }],
+      },
     });
+    for (const image of expired) {
+      await this.prisma.vinylImage.delete({ where: { id: image.id } });
+      await this.removeFiles([image.fullPath, image.thumbPath]);
+    }
+    if (expired.length > 0) {
+      this.logger.log(`Purged ${expired.length} image(s) deleted more than 30 days ago`);
+    }
+    return expired.length;
+  }
+
+  // Best effort: a file that's already gone is fine, and one that can't be
+  // removed is only wasted space — never a reason to fail the request.
+  private async removeFiles(relativePaths: string[]): Promise<void> {
+    const root = resolve(getUploadsRoot());
+    for (const relativePath of relativePaths) {
+      const target = resolve(root, relativePath);
+      // Paths come from the database, but never follow one out of the root.
+      if (!target.startsWith(root + sep)) continue;
+      try {
+        await withTransientFsRetry(() => unlink(target));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          this.logger.warn(`Could not remove ${relativePath}: ${(err as Error).message}`);
+        }
+      }
+    }
   }
 
   // Soft delete: sets deletedAt on the slot's row. The files stay on disk —

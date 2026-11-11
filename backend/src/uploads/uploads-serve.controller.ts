@@ -21,16 +21,29 @@ export class UploadsServeController {
     @Param('filename') filename: string,
     @Res() res: Response,
   ) {
+    const id = Number(vinylId);
+    if (!Number.isInteger(id)) {
+      throw new NotFoundException();
+    }
     const relativePath = `${vinylId}/${filename}`;
     const image = await this.prisma.vinylImage.findFirst({
       where: {
+        // Narrows the lookup to one record's handful of rows (indexed)
+        // instead of comparing paths across every image.
+        vinylId: id,
         deletedAt: null,
+        vinyl: { deletedAt: null },
         OR: [{ fullPath: relativePath }, { thumbPath: relativePath }],
       },
     });
     if (!image) {
       throw new NotFoundException();
     }
-    res.sendFile(join(getUploadsRoot(), relativePath));
+    // Every upload gets file names of its own (see UploadsService.saveImage),
+    // so what a URL serves never changes and a browser can keep it for good.
+    // `private` keeps shared caches (Cloudflare's edge) out of it: they
+    // would go on serving an image after it has been deleted here.
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.sendFile(join(getUploadsRoot(), relativePath), { cacheControl: false });
   }
 }

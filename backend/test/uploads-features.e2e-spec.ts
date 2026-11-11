@@ -52,8 +52,8 @@ describe('Image new-feature behavior (disc/side uniqueness, soft delete + restor
     // discNumber]) slot is keyed by discNumber too, so disc 2 doesn't
     // collide with (or overwrite) disc 1.
     expect(res2.body.id).not.toBe(res1.body.id);
-    expect(res1.body.fullPath).toBe(`${vinylId}/disc-side-a-1-full.webp`);
-    expect(res2.body.fullPath).toBe(`${vinylId}/disc-side-a-2-full.webp`);
+    expect(res1.body.fullPath).toMatch(new RegExp(`^${vinylId}/disc-side-a-1-[0-9a-f]{12}-full\\.webp$`));
+    expect(res2.body.fullPath).toMatch(new RegExp(`^${vinylId}/disc-side-a-2-[0-9a-f]{12}-full\\.webp$`));
 
     const vinyl = await request(ctx.httpServer)
       .get(`/vinyls/${vinylId}`)
@@ -139,8 +139,8 @@ describe('Image new-feature behavior (disc/side uniqueness, soft delete + restor
 
     // Distinct rows and files — slot A and slot B don't collide.
     expect(resB.body.id).not.toBe(resA1.body.id);
-    expect(resA1.body.fullPath).toBe(`${vinylId}/inner-sleeve-a-1-full.webp`);
-    expect(resB.body.fullPath).toBe(`${vinylId}/inner-sleeve-b-1-full.webp`);
+    expect(resA1.body.fullPath).toMatch(new RegExp(`^${vinylId}/inner-sleeve-a-1-[0-9a-f]{12}-full\\.webp$`));
+    expect(resB.body.fullPath).toMatch(new RegExp(`^${vinylId}/inner-sleeve-b-1-[0-9a-f]{12}-full\\.webp$`));
 
     // Replacing slot A leaves slot B's row and file untouched.
     const sleeveA2 = await createTestImageBuffer({ width: 210, height: 210 });
