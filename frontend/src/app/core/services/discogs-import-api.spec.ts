@@ -88,11 +88,11 @@ describe('DiscogsImportApiService', () => {
     await promise;
   });
 
-  it('importRelease() GETs the release-specific import endpoint', async () => {
+  it('importRelease() POSTs to the release-specific import endpoint', async () => {
     const promise = service.importRelease(249504, false);
 
     const req = httpMock.expectOne(`${API_URL}/import/discogs/249504?images=false`);
-    expect(req.request.method).toBe('GET');
+    expect(req.request.method).toBe('POST');
     expect(req.request.withCredentials).toBe(true);
     req.flush(sampleImportedVinyl);
 
