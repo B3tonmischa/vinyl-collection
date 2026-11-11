@@ -26,6 +26,19 @@ services:
     volumes:
       - ./data/db:/data/db
       - ./data/uploads:/data/uploads
+    security_opt:
+      - no-new-privileges:true
+    # GET / is the backend's public health route (app.controller.ts).
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     networks:
       - internal
 
@@ -34,15 +47,21 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    security_opt:
+      - no-new-privileges:true
     networks:
       - internal
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # Pinned rather than `latest`, so an image published upstream can't
+    # change what runs here on the next `up`. Bump it deliberately.
+    image: cloudflare/cloudflared:2026.10.7
     command: tunnel run
     restart: unless-stopped
     depends_on:
       - caddy
+    security_opt:
+      - no-new-privileges:true
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
     networks:

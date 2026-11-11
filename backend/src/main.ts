@@ -1,10 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // In production every request arrives through Caddy (and cloudflared
+  // before it), both on private container addresses. Trusting those hops
+  // makes `req.ip` the real client taken from X-Forwarded-For, which the
+  // login rate limit keys on; a direct connection is unaffected.
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+  // Don't advertise the framework.
+  app.disable('x-powered-by');
 
   app.use(cookieParser());
 

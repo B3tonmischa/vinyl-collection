@@ -38,6 +38,13 @@ describe('Image upload pipeline', () => {
     await admin.post(`/vinyls/${vinylId}/images/cover-front`).expect(400);
   });
 
+  it('rejects a file that is not an image with 400, not 500', async () => {
+    await admin
+      .post(`/vinyls/${vinylId}/images/cover-front`)
+      .attach('file', Buffer.from('definitely not an image'), 'scan.jpg')
+      .expect(400);
+  });
+
   it('rejects an unknown image kind', async () => {
     const buf = await createTestImageBuffer({ width: 100, height: 100 });
     await admin

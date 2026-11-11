@@ -13,8 +13,34 @@
 # file order, and the plain /vinyl-collection/* block below would also
 # match API requests if it came first.
 
+{
+	# cloudflared reaches Caddy from a private container address and sets
+	# X-Forwarded-For to the real visitor. Trusting private ranges makes
+	# Caddy pass that on to the backend instead of replacing it with
+	# cloudflared's own address — the backend's login rate limit is per
+	# client IP (see backend/src/main.ts).
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
 :80 {
 	encode gzip zstd
+
+	# Baseline hardening for every response, API and static files alike.
+	# No Content-Security-Policy beyond frame-ancestors (the scan worker's
+	# OpenCV build needs wasm/eval allowances that deserve their own
+	# change), and no HSTS: that would bind the whole domain, which this
+	# app only owns a subpath of.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy strict-origin-when-cross-origin
+		# The admin's camera capture is the only powerful feature in use.
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+	}
 
 	# Bare /vinyl-collection (no trailing slash) would otherwise fall
 	# through to the SPA handler below with a path that doesn't match

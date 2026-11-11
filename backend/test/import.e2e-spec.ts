@@ -104,7 +104,7 @@ describe('Discogs import', () => {
     });
 
     it('rejects import without a session', async () => {
-      await request(ctx.httpServer).get('/import/discogs/249504').expect(401);
+      await request(ctx.httpServer).post('/import/discogs/249504').expect(401);
     });
   });
 
@@ -143,11 +143,11 @@ describe('Discogs import', () => {
     });
   });
 
-  describe('GET /import/discogs/:releaseId', () => {
+  describe('POST /import/discogs/:releaseId', () => {
     it('creates a real, fully editable vinyl record with artists, tracks, format mapping, and images resolved', async () => {
       discogs.getRelease.mockResolvedValue(releaseFixture());
 
-      const res = await admin.get('/import/discogs/249504').query({ images: true }).expect(200);
+      const res = await admin.post('/import/discogs/249504').query({ images: true }).expect(201);
 
       expect(res.body).toMatchObject({
         title: 'OK Computer',
@@ -194,7 +194,7 @@ describe('Discogs import', () => {
     ])('imports the metadata but no images %s', async (_label, query) => {
       discogs.getRelease.mockResolvedValue(releaseFixture());
 
-      const res = await admin.get('/import/discogs/249504').query(query).expect(200);
+      const res = await admin.post('/import/discogs/249504').query(query).expect(201);
 
       expect(res.body).toMatchObject({ title: 'OK Computer', label: 'Parlophone' });
       expect(res.body.tracks).toHaveLength(3);
@@ -203,7 +203,7 @@ describe('Discogs import', () => {
     });
 
     it('400s on an images value that is not a boolean, before creating anything', async () => {
-      await admin.get('/import/discogs/249504').query({ images: 'yes' }).expect(400);
+      await admin.post('/import/discogs/249504').query({ images: 'yes' }).expect(400);
       expect(discogs.getRelease).not.toHaveBeenCalled();
     });
 
@@ -221,7 +221,7 @@ describe('Discogs import', () => {
         }),
       );
 
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.post('/import/discogs/249504').expect(201);
       expect(res.body.tracks[0].artists).toEqual([]);
       expect(res.body.tracks[0].effectiveArtists).toEqual(res.body.artists);
     });
@@ -251,7 +251,7 @@ describe('Discogs import', () => {
         }),
       );
 
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.post('/import/discogs/249504').expect(201);
 
       expect(res.body.artists).toEqual([{ id: expect.any(Number), name: 'Santana' }]);
 
@@ -284,7 +284,7 @@ describe('Discogs import', () => {
         releaseFixture({ formats: [{ name: 'Vinyl', descriptions: ['Limited Edition', 'Gatefold'] }] }),
       );
 
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.post('/import/discogs/249504').expect(201);
       expect(res.body).toMatchObject({ releaseType: null, discSize: null, speed: null });
     });
 
@@ -292,7 +292,7 @@ describe('Discogs import', () => {
       const existing = await admin.post('/artists').send({ name: 'RADIOHEAD' }).expect(201);
 
       discogs.getRelease.mockResolvedValue(releaseFixture());
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.post('/import/discogs/249504').expect(201);
 
       expect(res.body.artists).toEqual([{ id: existing.body.id, name: 'Radiohead' }]);
     });
@@ -301,7 +301,7 @@ describe('Discogs import', () => {
       discogs.getRelease.mockResolvedValue(
         releaseFixture({ artists: [{ id: 5, name: 'Charles Watson (2)' }] }),
       );
-      const res = await admin.get('/import/discogs/249504').expect(200);
+      const res = await admin.post('/import/discogs/249504').expect(201);
       expect(res.body.artists).toEqual([{ id: expect.any(Number), name: 'Charles Watson' }]);
     });
 
@@ -311,7 +311,7 @@ describe('Discogs import', () => {
         .mockRejectedValueOnce(new Error('CDN hiccup'))
         .mockResolvedValueOnce(ONE_PIXEL_PNG);
 
-      const res = await admin.get('/import/discogs/249504').query({ images: true }).expect(200);
+      const res = await admin.post('/import/discogs/249504').query({ images: true }).expect(201);
       expect(res.body.images).toHaveLength(1);
     });
   });

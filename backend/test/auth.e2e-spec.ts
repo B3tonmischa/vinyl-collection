@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { LOGIN_ATTEMPTS_PER_MINUTE } from '../src/auth/auth.controller';
 import {
   createTestApp,
   TestAppContext,
@@ -97,5 +98,31 @@ describe('Auth (current behavior)', () => {
       .post('/vinyls')
       .send({ artist: 'Boards of Canada', title: 'Geogaddi' })
       .expect(401);
+  });
+});
+
+describe('Auth: login rate limit', () => {
+  let ctx: TestAppContext;
+
+  beforeAll(async () => {
+    ctx = await createTestApp();
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  it('answers 429 after too many login attempts from one client', async () => {
+    for (let attempt = 0; attempt < LOGIN_ATTEMPTS_PER_MINUTE; attempt++) {
+      await request(ctx.httpServer)
+        .post('/auth/login')
+        .send({ username: TEST_ADMIN_USERNAME, password: 'wrong' })
+        .expect(401);
+    }
+    // Even the right password is turned away until the window passes.
+    await request(ctx.httpServer)
+      .post('/auth/login')
+      .send({ username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD })
+      .expect(429);
   });
 });

@@ -7,20 +7,28 @@ import {
   Post,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './public.decorator';
 
 const COOKIE_NAME = 'session';
+export const LOGIN_ATTEMPTS_PER_MINUTE = 10;
 const isProd = process.env.NODE_ENV === 'production';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // The one endpoint that takes a password guess: limited per client IP
+  // (see main.ts's `trust proxy` for how that IP is found behind Caddy
+  // and Cloudflare). Answers 429 once the limit is hit.
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: LOGIN_ATTEMPTS_PER_MINUTE, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

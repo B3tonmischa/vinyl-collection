@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { mkdir, rename, unlink } from 'fs/promises';
@@ -108,6 +109,8 @@ function normalizeDiscNumber(kind: ImageKind, requested: number): number {
 
 @Injectable()
 export class UploadsService {
+  private readonly logger = new Logger(UploadsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async saveImage(
@@ -121,6 +124,14 @@ export class UploadsService {
     });
     if (!vinyl) {
       throw new NotFoundException(`Vinyl ${vinylId} not found`);
+    }
+
+    // Anything sharp can't read is the client's mistake (400), not a
+    // server error — checked before a directory or temp file is created.
+    try {
+      await sharp(file.buffer).metadata();
+    } catch {
+      throw new BadRequestException('The uploaded file is not a supported image');
     }
 
     const kind = SLUG_TO_KIND[kindSlug];
@@ -166,9 +177,9 @@ export class UploadsService {
       await withTransientFsRetry(() => rename(tmpThumb, thumbDest));
     } catch (err) {
       await Promise.allSettled([unlink(tmpFull), unlink(tmpThumb)]);
-      throw new InternalServerErrorException(
-        `Failed to process image: ${(err as Error).message}`,
-      );
+      // The detail (paths, libvips internals) goes to the log, not the client.
+      this.logger.error(`Failed to process image for vinyl ${vinylId}`, (err as Error).stack);
+      throw new InternalServerErrorException('Failed to process image');
     }
 
     const fullPath = `${vinylId}/${fullFilename}`;

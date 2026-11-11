@@ -1,7 +1,33 @@
-import { BadGatewayException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  GatewayTimeoutException,
+  HttpException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { DiscogsRelease, DiscogsSearchResponse } from './discogs.types';
 
 const DISCOGS_API_BASE = 'https://api.discogs.com';
+
+/** How long Discogs gets to answer before the request is given up on. */
+const REQUEST_TIMEOUT_MS = 15_000;
+/** Same cap as a manual upload (see uploads.controller.ts). */
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
+// Image URLs come out of a Discogs API response, not from this app, so
+// they're only followed when they point back at Discogs over HTTPS.
+function isDiscogsImageUrl(uri: string): boolean {
+  try {
+    const url = new URL(uri);
+    return (
+      url.protocol === 'https:' &&
+      (url.hostname === 'discogs.com' || url.hostname.endsWith('.discogs.com'))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export interface DiscogsSearchParams {
   barcode?: string;
@@ -66,16 +92,59 @@ export class DiscogsClient {
   }
 
   async downloadImage(uri: string): Promise<Buffer> {
-    const res = await fetch(uri, { headers: { 'User-Agent': this.userAgent } });
-    if (!res.ok) {
-      throw new BadGatewayException(`Failed to download image from Discogs (HTTP ${res.status})`);
+    if (!isDiscogsImageUrl(uri)) {
+      throw new BadGatewayException('Discogs returned an image URL outside discogs.com');
     }
-    return Buffer.from(await res.arrayBuffer());
+    return this.withTimeout(async (signal) => {
+      const res = await fetch(uri, { headers: { 'User-Agent': this.userAgent }, signal });
+      if (!res.ok) {
+        throw new BadGatewayException(`Failed to download image from Discogs (HTTP ${res.status})`);
+      }
+      if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) {
+        throw new BadGatewayException('Discogs image is too large');
+      }
+      // content-length can be absent or wrong, so the body is counted too.
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for await (const chunk of res.body ?? []) {
+        received += chunk.byteLength;
+        if (received > MAX_IMAGE_BYTES) {
+          throw new BadGatewayException('Discogs image is too large');
+        }
+        chunks.push(chunk);
+      }
+      return Buffer.concat(chunks);
+    });
   }
 
   private async request<T>(url: URL): Promise<T> {
-    url.searchParams.set('token', this.token);
-    const res = await fetch(url, { headers: { 'User-Agent': this.userAgent } });
+    // The token goes in a header rather than a `token` query parameter, so
+    // it never ends up in a URL that a proxy or an error message might log.
+    const headers = {
+      'User-Agent': this.userAgent,
+      Authorization: `Discogs token=${this.token}`,
+    };
+    return this.withTimeout(async (signal) => {
+      const res = await fetch(url, { headers, signal });
+      return this.parse<T>(res);
+    });
+  }
+
+  // Runs one outbound call with a deadline, and turns a timeout or a
+  // network failure into a gateway error instead of a bare 500.
+  private async withTimeout<T>(call: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    try {
+      return await call(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      if ((err as Error).name === 'TimeoutError') {
+        throw new GatewayTimeoutException('Discogs did not answer in time');
+      }
+      throw new BadGatewayException('Could not reach Discogs');
+    }
+  }
+
+  private async parse<T>(res: Response): Promise<T> {
     if (res.status === 404) {
       throw new NotFoundException('Discogs release not found');
     }

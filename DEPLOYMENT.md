@@ -266,6 +266,15 @@ The backend's entrypoint runs `prisma migrate deploy` on every start,
 so any new migrations that came in with the update are applied
 automatically — no separate manual step.
 
+The backend checks its auth settings when it starts and refuses to boot
+if `JWT_SECRET`, `ADMIN_USERNAME` or `ADMIN_PASSWORD_HASH` is missing or
+still the placeholder from `.env.docker.example` — `docker compose logs
+backend` names the setting. `docker compose ps` shows the backend as
+`healthy` once it answers.
+
+`cloudflared` is pinned to a fixed version in `docker-compose.yml`; to
+update it, change the tag there and run the two commands above.
+
 ## Troubleshooting
 
 - **`docker compose up` fails immediately with `permission denied while
