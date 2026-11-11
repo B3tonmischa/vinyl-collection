@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CarouselStateService } from '../../core/services/carousel-state';
-import { Vinyl } from '../../models/vinyl.model';
+import { VinylSummary } from '../../models/vinyl.model';
 import { VinylCardComponent } from '../vinyl-card/vinyl-card';
 import {
   canAnimateStep,
@@ -79,7 +79,7 @@ export class VinylCarouselComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly state = inject(CarouselStateService);
 
-  private readonly _vinyls = signal<Vinyl[]>([]);
+  private readonly _vinyls = signal<VinylSummary[]>([]);
   private readonly _center = signal<number | null>(null);
 
   private readonly reducedMotion =
@@ -114,7 +114,7 @@ export class VinylCarouselComponent {
   }
 
   @Input({ required: true })
-  set vinyls(value: Vinyl[]) {
+  set vinyls(value: VinylSummary[]) {
     this._vinyls.set(value);
     if (value.length > 0 && this._center() === null) {
       const start = startIndex(value.map((v) => v.id), this.state.centeredVinylId);

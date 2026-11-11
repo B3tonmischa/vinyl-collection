@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../../generated/prisma/client';
 
 @Injectable()
 export class ArtistsService {
@@ -23,11 +24,12 @@ export class ArtistsService {
   // instead of creating a new one when the name already exists in any case.
   async findOrCreate(name: string) {
     const trimmed = name.trim();
-    const candidates = await this.prisma.artist.findMany({
-      where: { name: { contains: trimmed } },
-    });
-    const existing = candidates.find(
-      (artist) => artist.name.toLowerCase() === trimmed.toLowerCase(),
+    // An exact, case-insensitive match in SQL. (This used to fetch every
+    // artist whose name merely *contains* the new one — all of them, for a
+    // one-letter name — and compare in JS.) NOCASE folds ASCII letters
+    // only, the same reach the LIKE-based lookup had.
+    const [existing] = await this.prisma.$queryRaw<{ id: number; name: string }[]>(
+      Prisma.sql`SELECT "id", "name" FROM "Artist" WHERE "name" = ${trimmed} COLLATE NOCASE LIMIT 1`,
     );
     if (existing) {
       return existing;
