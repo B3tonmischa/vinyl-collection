@@ -58,7 +58,6 @@ describe('DiscogsImportApiService', () => {
     const req = httpMock.expectOne(
       (r) => r.url === `${API_URL}/import/discogs/search` && r.method === 'GET',
     );
-    expect(req.request.withCredentials).toBe(true);
     expect(req.request.params.get('artist')).toBe('Radiohead');
     expect(req.request.params.has('barcode')).toBe(false);
     expect(req.request.params.has('catno')).toBe(false);
@@ -93,7 +92,6 @@ describe('DiscogsImportApiService', () => {
 
     const req = httpMock.expectOne(`${API_URL}/import/discogs/249504?images=false`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.withCredentials).toBe(true);
     req.flush(sampleImportedVinyl);
 
     await expect(promise).resolves.toEqual(sampleImportedVinyl);

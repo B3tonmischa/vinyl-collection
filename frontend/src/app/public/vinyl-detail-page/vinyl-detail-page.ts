@@ -1,11 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  Input,
   computed,
   inject,
+  input,
   resource,
-  signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiConfigService } from '../../core/services/api-config';
@@ -16,11 +15,12 @@ import {
   RELEASE_TYPE_LABELS,
   SPEED_LABELS,
   Vinyl,
+  artistNames,
 } from '../../models/vinyl.model';
 import { RecordViewerComponent } from '../record-viewer/record-viewer';
 import { TracklistComponent } from '../tracklist/tracklist';
 import { ScrollToTop } from '../../shared/scroll-to-top/scroll-to-top';
-import { PageTint, pageTint } from './cover-tint.logic';
+import { PageTint, pageTint } from '../../core/services/cover-tint.logic';
 
 interface Fact {
   label: string;
@@ -37,14 +37,13 @@ export class VinylDetailPage {
   private readonly vinylsApi = inject(VinylsApiService);
   private readonly apiConfig = inject(ApiConfigService);
   private readonly coverTint = inject(CoverTintService);
-  private readonly _id = signal<number | null>(null);
 
   /** Bound from the `:id` route param via withComponentInputBinding(). */
-  @Input()
-  set id(value: string) {
-    const parsed = Number(value);
-    this._id.set(Number.isFinite(parsed) ? parsed : null);
-  }
+  readonly id = input<string>();
+  private readonly _id = computed(() => {
+    const parsed = Number(this.id());
+    return Number.isFinite(parsed) ? parsed : null;
+  });
 
   protected readonly detailResource = this.vinylsApi.detailResource(this._id);
 
@@ -73,9 +72,7 @@ export class VinylDetailPage {
     return color ? pageTint(color) : undefined;
   });
 
-  protected artistNames(vinyl: Vinyl): string {
-    return vinyl.artists.map((a) => a.name).join(', ');
-  }
+  protected readonly artistNames = artistNames;
 
   /** The pressing's facts as labelled pairs; ones without a value are left out. */
   protected facts(vinyl: Vinyl): Fact[] {

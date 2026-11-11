@@ -1,7 +1,7 @@
 import { Service, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CoverColor, dominantColor } from '../../public/vinyl-detail-page/cover-tint.logic';
+import { CoverColor, dominantColor } from './cover-tint.logic';
 
 /** Versioned: bump it whenever dominantColor changes, so old picks are re-read. */
 const STORAGE_PREFIX = 'vinyl-cover-color:v2:';

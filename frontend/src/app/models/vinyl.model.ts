@@ -21,6 +21,11 @@ export interface Artist {
   name: string;
 }
 
+/** Artist names as one line of text, e.g. "Audio88, Yassin". */
+export function artistNames(artists: readonly Artist[]): string {
+  return artists.map((a) => a.name).join(', ');
+}
+
 export interface Track {
   id: number;
   position: number;

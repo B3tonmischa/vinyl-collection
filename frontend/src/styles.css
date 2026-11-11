@@ -4,7 +4,7 @@
 
 /*
  * Colours a record's detail page takes from its front cover (see
- * cover-tint.logic.ts): the page ground, hairlines and secondary text. These
+ * core/services/cover-tint.logic.ts): the page ground, hairlines and secondary text. These
  * are the neutral defaults; the detail page overrides them per record.
  */
 :root {

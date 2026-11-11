@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { ArtistsApiService } from '../../core/services/artists-api';
 import { Artist } from '../../models/vinyl.model';
 import { ComboboxComponent, ComboboxOption } from '../../shared/combobox/combobox';
@@ -18,43 +18,43 @@ import { ComboboxComponent, ComboboxOption } from '../../shared/combobox/combobo
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ArtistOverridePickerComponent {
-  @Input({ required: true }) albumArtists!: Artist[];
-  @Input({ required: true }) dirty!: boolean;
-  @Input({ required: true }) overrideArtists!: Artist[];
+  readonly albumArtists = input.required<Artist[]>();
+  readonly dirty = input.required<boolean>();
+  readonly overrideArtists = input.required<Artist[]>();
 
   /** Toggle membership of an album artist (or remove a guest). */
-  @Output() toggle = new EventEmitter<Artist>();
+  readonly toggle = output<Artist>();
   /** Add a new artist (from search or create) not currently displayed. */
-  @Output() add = new EventEmitter<Artist>();
-  @Output() resetToInherit = new EventEmitter<void>();
+  readonly add = output<Artist>();
+  readonly resetToInherit = output<void>();
 
   private readonly artistsApi = inject(ArtistsApiService);
   private readonly query = signal('');
   protected readonly searchResource = this.artistsApi.searchResource(this.query);
 
-  protected get displayedArtists(): Artist[] {
-    return this.dirty ? this.overrideArtists : this.albumArtists;
-  }
+  private readonly displayedArtists = computed(() =>
+    this.dirty() ? this.overrideArtists() : this.albumArtists(),
+  );
 
-  protected get guestArtists(): Artist[] {
-    const albumIds = new Set(this.albumArtists.map((a) => a.id));
-    return this.displayedArtists.filter((a) => !albumIds.has(a.id));
-  }
+  protected readonly guestArtists = computed(() => {
+    const albumIds = new Set(this.albumArtists().map((a) => a.id));
+    return this.displayedArtists().filter((a) => !albumIds.has(a.id));
+  });
 
   protected isChecked(artist: Artist): boolean {
-    return this.displayedArtists.some((a) => a.id === artist.id);
+    return this.displayedArtists().some((a) => a.id === artist.id);
   }
 
-  protected get comboboxOptions(): ComboboxOption[] {
-    const shownIds = new Set(this.displayedArtists.map((a) => a.id));
+  protected readonly comboboxOptions = computed<ComboboxOption[]>(() => {
+    const shownIds = new Set(this.displayedArtists().map((a) => a.id));
     return (this.searchResource.value() ?? [])
       .filter((a) => !shownIds.has(a.id))
       .map((a) => ({ id: a.id, label: a.name }));
-  }
+  });
 
-  protected get existingNames(): string[] {
-    return (this.searchResource.value() ?? []).map((a) => a.name);
-  }
+  protected readonly existingNames = computed(() =>
+    (this.searchResource.value() ?? []).map((a) => a.name),
+  );
 
   protected onQueryChange(value: string): void {
     this.query.set(value);

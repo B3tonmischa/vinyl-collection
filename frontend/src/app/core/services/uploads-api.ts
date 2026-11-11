@@ -17,7 +17,6 @@ export class UploadsApiService {
       this.http.post<VinylImage>(
         `${this.apiConfig.apiUrl}/vinyls/${vinylId}/images/${slug}?discNumber=${discNumber}`,
         formData,
-        { withCredentials: true },
       ),
     );
   }
@@ -27,7 +26,6 @@ export class UploadsApiService {
     return firstValueFrom(
       this.http.delete<void>(
         `${this.apiConfig.apiUrl}/vinyls/${vinylId}/images/${slug}?discNumber=${discNumber}`,
-        { withCredentials: true },
       ),
     );
   }
@@ -38,7 +36,6 @@ export class UploadsApiService {
       this.http.post<void>(
         `${this.apiConfig.apiUrl}/vinyls/${vinylId}/images/${slug}/restore?discNumber=${discNumber}`,
         null,
-        { withCredentials: true },
       ),
     );
   }
@@ -55,7 +52,6 @@ export class UploadsApiService {
           a: { kind: IMAGE_KIND_SLUGS[a.kind], discNumber: a.discNumber },
           b: { kind: IMAGE_KIND_SLUGS[b.kind], discNumber: b.discNumber },
         },
-        { withCredentials: true },
       ),
     );
   }
