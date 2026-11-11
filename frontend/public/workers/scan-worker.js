@@ -23,7 +23,9 @@ function loadOpenCv() {
   if (!ready) {
     ready = new Promise((resolve, reject) => {
       try {
-        importScripts('../vendor/opencv/opencv.js');
+        // The version in the URL is what lets the file be cached for good
+        // (see frontend/Caddyfile): a newer OpenCV build gets a new URL.
+        importScripts('../vendor/opencv/opencv.js?v=4.9.0');
       } catch (err) {
         reject(err);
         return;

@@ -54,6 +54,22 @@
 
 	handle_path /vinyl-collection/* {
 		root * /srv
+
+		# Files whose URL changes whenever their content does can be kept
+		# by the browser for good, instead of being asked about on every
+		# page load:
+		#  - Angular's bundles, which carry a content hash in their name
+		#    (main-IVAMGJCS.js, chunk-BhlHx9_h.js, styles-74ZVEH7O.css);
+		#  - the scan worker and the 10 MB OpenCV build it loads, which
+		#    are requested with a ?v= version (see scan-detector.ts and
+		#    scan-worker.js).
+		# index.html matches neither and is still revalidated every time,
+		# which is how a new deploy reaches the browser at all.
+		@hashed path_regexp -[A-Za-z0-9_-]{8}\.(js|css)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@versioned path /workers/* /vendor/*
+		header @versioned Cache-Control "public, max-age=31536000, immutable"
+
 		try_files {path} /index.html
 		file_server
 	}
