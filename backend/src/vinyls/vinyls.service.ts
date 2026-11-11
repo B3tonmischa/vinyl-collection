@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVinylDto } from './dto/create-vinyl.dto';
 import { UpdateVinylDto } from './dto/update-vinyl.dto';
-import { Prisma } from '../../generated/prisma/client';
+import { ImageKind, Prisma } from '../../generated/prisma/client';
 
 // Shared shape for every read that returns a full vinyl record: album-level
 // artists, tracks with their own (possibly overridden) artists, and only
@@ -39,6 +39,34 @@ function toVinylResponse(vinyl: VinylWithRelations) {
         effectiveArtists: overrideArtists.length > 0 ? overrideArtists : artists,
       };
     }),
+  };
+}
+
+// What the list and search return per record: just enough to draw a card
+// (cover, title, artists, year). A whole collection's tracks, per-track
+// artists and every scan used to travel with each list request, though only
+// a record's own page shows them — that page reads GET /vinyls/:id.
+const SUMMARY_SELECT = {
+  id: true,
+  title: true,
+  year: true,
+  artists: { select: { artist: true } },
+  images: {
+    where: { kind: ImageKind.COVER_FRONT, deletedAt: null },
+    select: { thumbPath: true },
+  },
+} satisfies Prisma.VinylSelect;
+
+type VinylSummaryRow = Prisma.VinylGetPayload<{ select: typeof SUMMARY_SELECT }>;
+
+function toVinylSummary(vinyl: VinylSummaryRow) {
+  return {
+    id: vinyl.id,
+    title: vinyl.title,
+    year: vinyl.year,
+    artists: vinyl.artists.map((va) => va.artist),
+    // Relative to the uploads root, like VinylImage.thumbPath.
+    coverThumbPath: vinyl.images[0]?.thumbPath ?? null,
   };
 }
 
@@ -80,10 +108,10 @@ export class VinylsService {
     }
     const vinyls = await this.prisma.vinyl.findMany({
       where: { deletedAt: null },
-      include: DETAIL_INCLUDE,
+      select: SUMMARY_SELECT,
       orderBy: [{ title: 'asc' }, { year: 'asc' }],
     });
-    return vinyls.map(toVinylResponse);
+    return vinyls.map(toVinylSummary);
   }
 
   // Full-text search backed by the vinyl_search FTS5 virtual table (see
@@ -109,11 +137,11 @@ export class VinylsService {
 
     const vinyls = await this.prisma.vinyl.findMany({
       where: { id: { in: orderedIds }, deletedAt: null },
-      include: DETAIL_INCLUDE,
+      select: SUMMARY_SELECT,
     });
     const rank = new Map(orderedIds.map((id, index) => [id, index]));
     vinyls.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
-    return vinyls.map(toVinylResponse);
+    return vinyls.map(toVinylSummary);
   }
 
   async findOne(id: number) {

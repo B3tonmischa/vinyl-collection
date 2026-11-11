@@ -2,7 +2,7 @@ import { Service, Signal, inject } from '@angular/core';
 import { HttpClient, httpResource } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { ApiConfigService } from './api-config';
-import { Vinyl, VinylPayload } from '../../models/vinyl.model';
+import { Vinyl, VinylPayload, VinylSummary } from '../../models/vinyl.model';
 
 /**
  * Reads go through httpResource (eager, auto-refetch on signal changes).
@@ -16,7 +16,7 @@ export class VinylsApiService {
   private readonly apiConfig = inject(ApiConfigService);
 
   listResource(query: Signal<string>) {
-    return httpResource<Vinyl[]>(
+    return httpResource<VinylSummary[]>(
       () => `${this.apiConfig.apiUrl}/vinyls?q=${encodeURIComponent(query())}`,
       { defaultValue: [] },
     );

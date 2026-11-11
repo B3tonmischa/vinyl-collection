@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input, inject } from '@angular/core';
 import { ApiConfigService } from '../../core/services/api-config';
-import { Vinyl } from '../../models/vinyl.model';
+import { VinylSummary } from '../../models/vinyl.model';
 
 /**
  * Purely presentational: cover thumbnail, title, artist(s), year. Shared by
@@ -37,7 +37,7 @@ import { Vinyl } from '../../models/vinyl.model';
   ],
 })
 export class VinylCardComponent {
-  @Input({ required: true }) vinyl!: Vinyl;
+  @Input({ required: true }) vinyl!: VinylSummary;
   /** Hide the title/artist caption — used by the carousel's roll-in spin, where fast-changing text is just noise. */
   @Input() showCaption = true;
   /**
@@ -59,8 +59,8 @@ export class VinylCardComponent {
   private readonly apiConfig = inject(ApiConfigService);
 
   protected get coverUrl(): string | null {
-    const cover = this.vinyl.images?.find((img) => img.kind === 'COVER_FRONT');
-    return cover ? this.apiConfig.uploadUrl(this.vinyl.id, cover.thumbPath) : null;
+    const path = this.vinyl.coverThumbPath;
+    return path ? this.apiConfig.uploadUrl(this.vinyl.id, path) : null;
   }
 
   protected get artistNames(): string {

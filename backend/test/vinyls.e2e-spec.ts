@@ -5,6 +5,7 @@ import {
   TEST_ADMIN_PASSWORD,
   TEST_ADMIN_USERNAME,
 } from './utils/create-test-app';
+import { createTestImageBuffer } from './utils/fixtures';
 
 describe('Vinyl CRUD', () => {
   let ctx: TestAppContext;
@@ -96,6 +97,56 @@ describe('Vinyl CRUD', () => {
     expect(
       res.body.some((v: { title: string }) => v.title === 'OK Computer'),
     ).toBe(true);
+  });
+
+  it('lists and searches records as card-sized summaries, not full records', async () => {
+    const artist = await admin.post('/artists').send({ name: 'Summary Artist' }).expect(201);
+    const created = await admin
+      .post('/vinyls')
+      .send({
+        title: 'Summary Shape',
+        year: 1999,
+        label: 'Not In The List',
+        artistIds: [artist.body.id],
+        tracks: [{ position: 1, title: 'Not In The List Either' }],
+      })
+      .expect(201);
+    const id = created.body.id;
+
+    const withoutCover = {
+      id,
+      title: 'Summary Shape',
+      year: 1999,
+      artists: [{ id: artist.body.id, name: 'Summary Artist' }],
+      coverThumbPath: null,
+    };
+    const find = (body: { id: number }[]) => body.find((v) => v.id === id);
+
+    const list = await request(ctx.httpServer).get('/vinyls').expect(200);
+    // toEqual: nothing beyond these five fields (no tracks, images, label…).
+    expect(find(list.body)).toEqual(withoutCover);
+
+    // The back cover is not the card's picture; the front cover is.
+    const scan = await createTestImageBuffer({ width: 50, height: 50 });
+    await admin.post(`/vinyls/${id}/images/cover-back`).attach('file', scan, 'b.jpg').expect(201);
+    const front = await admin
+      .post(`/vinyls/${id}/images/cover-front`)
+      .attach('file', scan, 'f.jpg')
+      .expect(201);
+    const withCover = { ...withoutCover, coverThumbPath: front.body.thumbPath };
+
+    const listed = await request(ctx.httpServer).get('/vinyls').expect(200);
+    expect(find(listed.body)).toEqual(withCover);
+    const searched = await request(ctx.httpServer)
+      .get('/vinyls')
+      .query({ q: 'Summary Shape' })
+      .expect(200);
+    expect(find(searched.body)).toEqual(withCover);
+
+    // A deleted cover no longer shows on the card.
+    await admin.delete(`/vinyls/${id}/images/cover-front`).expect(200);
+    const afterDelete = await request(ctx.httpServer).get('/vinyls').expect(200);
+    expect(find(afterDelete.body)).toEqual(withoutCover);
   });
 
   it('reads a single vinyl publicly, with its images array', async () => {

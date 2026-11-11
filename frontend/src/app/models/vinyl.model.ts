@@ -56,6 +56,20 @@ export interface Vinyl {
   images: VinylImage[];
 }
 
+/**
+ * One record as GET /vinyls (the list and the search) returns it: enough
+ * to draw a card. Tracks, images and the pressing's details come with the
+ * full Vinyl from GET /vinyls/:id.
+ */
+export interface VinylSummary {
+  id: number;
+  title: string;
+  year: number | null;
+  artists: Artist[];
+  /** The front cover's thumbnail, as VinylImage.thumbPath; null without a cover. */
+  coverThumbPath: string | null;
+}
+
 /** Body shape for POST/PATCH /vinyls/:id. */
 export interface VinylPayload {
   title: string;
