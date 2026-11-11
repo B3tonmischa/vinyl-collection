@@ -46,7 +46,7 @@ model Vinyl {
   year          Int?
   label         String?
   catalogNumber String?
-  // format, split into three independent, optional facets (see architecture-review-implementation-plan.md #2).
+  // format, split into three independent, optional facets.
   releaseType   ReleaseType?
   discSize      DiscSize?
   speed         Speed?
@@ -92,7 +92,7 @@ model Track {
   position Int
   title    String
   // e.g. "A", "B", "C"... — letters continue across discs, so this is
-  // deliberately not paired with a discNumber field (see plan doc #3).
+  // deliberately not paired with a discNumber field.
   side     String?
   // Empty = inherits Vinyl's artists; one or more rows = override that
   // replaces (not adds to) the inherited set entirely.

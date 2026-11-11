@@ -5,8 +5,7 @@
 // spin up a full app) so these stay fast and are the natural place to
 // extend if the format-mapping table or track-parsing rules need more
 // cases later, per the project's existing "extend the pure-function specs,
-// don't re-test through the component/controller" pattern
-// (frontend-implementation-status.md's track-list-editor.logic note).
+// don't re-test through the component/controller" pattern.
 import { mapDiscogsFormats } from '../src/import/discogs-format-mapping';
 import { parseDiscogsTracklist } from '../src/import/discogs-track-parser';
 

@@ -13,8 +13,7 @@ export interface MappedFormat {
  * consistently across releases, so a description that doesn't confidently
  * match anything here is simply left out — the admin fills the gap in
  * manually, same as for a fully manual entry. This table isn't exhaustive;
- * extend it as real-world imports turn up format strings it misses (see
- * discogs-import-implementation-status.md open item).
+ * extend it as real-world imports turn up format strings it misses.
  */
 const RELEASE_TYPE_MAP: Record<string, ReleaseType> = {
   lp: ReleaseType.LP,

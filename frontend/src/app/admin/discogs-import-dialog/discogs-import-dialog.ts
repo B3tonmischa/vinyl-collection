@@ -12,8 +12,8 @@ import { DiscogsSearchCandidate } from '../../models/discogs.model';
  * undefined means cancelled.
  *
  * Picking a result doesn't just "load a draft" — the import endpoint
- * already creates a real, persisted vinyl record before this resolves, per
- * the deviation documented in discogs-import-implementation-status.md. So
+ * already creates a real, persisted vinyl record before this resolves (see
+ * ImportService.importRelease() in the backend for why). So
  * there's no separate "confirm before saving" step here; review/edit happens
  * on the normal edit page the caller navigates to next. That also means the
  * "Import images" checkbox has to be set before picking: it's off by default

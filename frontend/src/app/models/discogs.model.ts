@@ -1,5 +1,4 @@
-// Types for the Discogs import feature. See project docs
-// discogs-import-feature-plan.md and discogs-import-implementation-status.md.
+// Types for the Discogs import feature (backend/src/import).
 
 export interface DiscogsSearchCandidate {
   discogsReleaseId: number;

@@ -28,8 +28,7 @@ COPY . .
 # that resolution check. It's never read for anything real.
 ENV DATABASE_URL="file:/tmp/build-placeholder.db"
 # Needs network access to binaries.prisma.sh to fetch the schema-engine
-# binary (Prisma 7 CLI behavior — see architecture-and-data-model.md,
-# "Working on this project in a sandboxed environment"). Normal on a
+# binary (Prisma 7 CLI behavior). Normal on a
 # home network; only a problem in a network-restricted sandbox.
 RUN npx prisma generate
 RUN npm run build

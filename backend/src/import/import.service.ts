@@ -72,8 +72,7 @@ export class ImportService {
    * record starts with empty slots, to be filled by camera capture or a
    * manual upload on the edit page.
    *
-   * Deviation from the original draft plan, worth flagging explicitly (see
-   * discogs-import-implementation-status.md): the plan described this
+   * Deviation from the original draft plan, worth flagging explicitly: the plan described this
    * endpoint as returning "a normalized draft payload... does not write
    * anything to the database", with the frontend feeding that draft into a
    * blank /admin/new form. That's incompatible with the accepted answer to
@@ -103,8 +102,7 @@ export class ImportService {
     const catalogNumber =
       rawCatno && rawCatno.toLowerCase() !== 'none' ? truncate(rawCatno, 100) : undefined;
 
-    // The app models a single freeform `genre` field (see
-    // architecture-and-data-model.md #2 — descriptive tags were explicitly
+    // The app models a single freeform `genre` field (descriptive tags were explicitly
     // scoped out), so Discogs's separate genres[]/styles[] (broad vs.
     // narrow classification) are just joined into one string here.
     const genreText = [...(release.genres ?? []), ...(release.styles ?? [])].join(', ');
@@ -141,7 +139,7 @@ export class ImportService {
         // Only populate artistIds when it's a real override — a track
         // whose Discogs-credited artists happen to match the album's own
         // is left to inherit, per the app's existing zero-rows-means-
-        // inherit semantics (architecture-and-data-model.md #3).
+        // inherit semantics.
         if (!matchesAlbum) {
           artistIds = trackArtists.map((a) => a.id);
         }
@@ -182,7 +180,7 @@ export class ImportService {
 
   // Resolves a list of Discogs artist credits to this app's own Artist
   // rows, reusing ArtistsService.findOrCreate() for dedup (never
-  // reimplemented here — see architecture-and-data-model.md #3) and
+  // reimplemented here) and
   // de-duplicating within this one call (case-insensitively) so the same
   // credit appearing twice on one release doesn't round-trip the DB twice.
   private async resolveArtists(
@@ -202,9 +200,8 @@ export class ImportService {
     return [...seen.values()];
   }
 
-  // Best-effort, deterministic slot assignment for a release's images (see
-  // discogs-import-feature-plan.md open question #1 and its "expect this
-  // mapping to be unreliable" caveat): Discogs's API only distinguishes
+  // Best-effort, deterministic slot assignment for a release's images (expect this
+  // mapping to be unreliable): Discogs's API only distinguishes
   // "primary" vs. "secondary" images and doesn't say which secondary image is
   // the back cover vs. an inner sleeve vs. a disc photo. This fills the app's
   // six slots in IMAGE_KIND_SLUGS order (primary first, then secondaries as

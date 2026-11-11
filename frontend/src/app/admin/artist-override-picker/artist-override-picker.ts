@@ -23,7 +23,7 @@ export class ArtistOverridePickerComponent {
   readonly overrideArtists = input.required<Artist[]>();
 
   /** Toggle membership of an album artist (or remove a guest). */
-  readonly toggle = output<Artist>();
+  readonly toggled = output<Artist>();
   /** Add a new artist (from search or create) not currently displayed. */
   readonly add = output<Artist>();
   readonly resetToInherit = output<void>();

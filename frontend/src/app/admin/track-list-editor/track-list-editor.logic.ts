@@ -2,7 +2,7 @@ import { Artist } from '../../models/vinyl.model';
 
 /**
  * One editable row per track. `dirty`/`overrideArtists` implement the
- * resolved track-artist-override design (see frontend-design-plan.md):
+ * resolved track-artist-override design:
  * pristine (dirty=false) always DISPLAYS the album's current artists as
  * checked but the payload omits `artistIds` (inherits); the first toggle
  * or add on a pristine row promotes it to dirty using that display as the
