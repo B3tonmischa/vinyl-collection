@@ -26,6 +26,20 @@ export class AuthService {
   private readonly _status = signal<SessionStatus>('unknown');
   private checkPromise: Promise<boolean> | null = null;
 
+  isAuthenticated(): boolean {
+    return this._status() === 'authenticated';
+  }
+
+  /**
+   * The backend stopped accepting the session (see apiInterceptor). Back
+   * to "unknown" rather than "anonymous", so the next admin navigation asks
+   * again — the user may well have signed in again in another tab by then.
+   */
+  sessionExpired(): void {
+    this._status.set('unknown');
+    this.checkPromise = null;
+  }
+
   /** Runs GET /auth/me at most once (until login/logout resets it); safe to call repeatedly. */
   ensureChecked(): Promise<boolean> {
     const current = this._status();
@@ -38,9 +52,7 @@ export class AuthService {
 
     this._status.set('checking');
     const promise: Promise<boolean> = firstValueFrom(
-      this.http
-        .get(`${this.apiConfig.apiUrl}/auth/me`, { withCredentials: true })
-        .pipe(timeout(SESSION_CHECK_TIMEOUT_MS)),
+      this.http.get(`${this.apiConfig.apiUrl}/auth/me`).pipe(timeout(SESSION_CHECK_TIMEOUT_MS)),
     )
       .then(() => {
         this._status.set('authenticated');
@@ -56,20 +68,14 @@ export class AuthService {
 
   async login(username: string, password: string): Promise<void> {
     await firstValueFrom(
-      this.http.post(
-        `${this.apiConfig.apiUrl}/auth/login`,
-        { username, password },
-        { withCredentials: true },
-      ),
+      this.http.post(`${this.apiConfig.apiUrl}/auth/login`, { username, password }),
     );
     this._status.set('authenticated');
     this.checkPromise = null;
   }
 
   async logout(): Promise<void> {
-    await firstValueFrom(
-      this.http.post(`${this.apiConfig.apiUrl}/auth/logout`, {}, { withCredentials: true }),
-    );
+    await firstValueFrom(this.http.post(`${this.apiConfig.apiUrl}/auth/logout`, {}));
     this._status.set('anonymous');
     this.checkPromise = null;
   }

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ToastService } from '../../core/services/toast';
 import { VinylsApiService } from '../../core/services/vinyls-api';
@@ -32,14 +32,13 @@ export class VinylFormPage {
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
 
-  private readonly _vinylId = signal<number | null>(null);
-
   /** Bound from the `:id` route param on the edit route; absent on `new`. */
-  @Input()
-  set id(value: string | undefined) {
+  readonly id = input<string>();
+  private readonly _vinylId = computed(() => {
+    const value = this.id();
     const parsed = value != null ? Number(value) : NaN;
-    this._vinylId.set(Number.isFinite(parsed) ? parsed : null);
-  }
+    return Number.isFinite(parsed) ? parsed : null;
+  });
 
   protected readonly isEdit = computed(() => this._vinylId() !== null);
   protected readonly detailResource = this.vinylsApi.detailResource(this._vinylId);

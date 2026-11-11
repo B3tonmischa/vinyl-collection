@@ -1,6 +1,6 @@
 <div class="space-y-2">
   <div class="flex flex-wrap items-center gap-3">
-    @for (artist of albumArtists; track artist.id) {
+    @for (artist of albumArtists(); track artist.id) {
       <label class="flex items-center gap-1.5 text-sm text-neutral-700">
         <input
           type="checkbox"
@@ -11,7 +11,7 @@
         {{ artist.name }}
       </label>
     }
-    @for (guest of guestArtists; track guest.id) {
+    @for (guest of guestArtists(); track guest.id) {
       <span class="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-sm text-amber-800">
         {{ guest.name }}
         <button
@@ -24,7 +24,7 @@
         </button>
       </span>
     }
-    @if (dirty) {
+    @if (dirty()) {
       <button
         type="button"
         (click)="resetToInherit.emit()"
@@ -37,8 +37,8 @@
 
   <app-combobox
     placeholder="Add a guest artist…"
-    [options]="comboboxOptions"
-    [existingLabels]="existingNames"
+    [options]="comboboxOptions()"
+    [existingLabels]="existingNames()"
     [loading]="searchResource.isLoading()"
     (queryChange)="onQueryChange($event)"
     (optionSelected)="onOptionSelected($event)"

@@ -31,7 +31,6 @@ export class DiscogsImportApiService {
     return firstValueFrom(
       this.http.get<DiscogsSearchCandidate[]>(`${this.apiConfig.apiUrl}/import/discogs/search`, {
         params,
-        withCredentials: true,
       }),
     );
   }
@@ -41,7 +40,7 @@ export class DiscogsImportApiService {
       this.http.post<ImportedVinyl>(
         `${this.apiConfig.apiUrl}/import/discogs/${discogsReleaseId}`,
         null,
-        { params: { images: importImages }, withCredentials: true },
+        { params: { images: importImages } },
       ),
     );
   }
