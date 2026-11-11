@@ -12,10 +12,11 @@ type ScanReply = { id: number; result?: unknown; error?: string };
 // Generous: the first load is a 10 MB download over mobile data.
 const INIT_TIMEOUT_MS = 90_000;
 
-// Files in public/ aren't content-hashed, so browsers (and phones) keep
-// serving a stale worker after a deploy. Bump this whenever
-// scan-worker.js changes its protocol or behavior.
-const WORKER_VERSION = 5;
+// Files in public/ aren't content-hashed, and the worker is served with a
+// cache lifetime of a year (see frontend/Caddyfile), so the URL has to
+// change whenever the file does. Bump this on every change to
+// scan-worker.js; scan-worker.sync.spec.ts fails until you do.
+export const WORKER_VERSION = 6;
 
 /**
  * What the camera dialog needs from OpenCV, run in
