@@ -1,5 +1,6 @@
 import { Service } from '@angular/core';
 import { environment } from '../../../environments/environment';
+import { VinylSummary } from '../../models/vinyl.model';
 
 /** Single point of configuration for the backend's base URL. */
 @Service()
@@ -15,5 +16,10 @@ export class ApiConfigService {
   uploadUrl(vinylId: number, storedPath: string): string {
     const filename = storedPath.split(/[\\/]/).pop() ?? storedPath;
     return `${this.apiUrl}/uploads/${vinylId}/${filename}`;
+  }
+
+  /** URL of a listed record's front cover thumbnail; null without a cover. */
+  coverThumbUrl(vinyl: VinylSummary): string | null {
+    return vinyl.coverThumbPath ? this.uploadUrl(vinyl.id, vinyl.coverThumbPath) : null;
   }
 }

@@ -6,7 +6,7 @@ import { ApiConfigService } from '../../core/services/api-config';
 import { ToastService } from '../../core/services/toast';
 import { VinylsApiService } from '../../core/services/vinyls-api';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog';
-import { VinylSummary } from '../../models/vinyl.model';
+import { VinylSummary, artistNames } from '../../models/vinyl.model';
 
 @Component({
   selector: 'app-admin-vinyl-list-page',
@@ -23,14 +23,7 @@ export class AdminVinylListPage {
   private readonly query = signal('');
   protected readonly listResource = this.vinylsApi.listResource(this.query);
 
-  protected coverUrl(vinyl: VinylSummary): string | null {
-    const path = vinyl.coverThumbPath;
-    return path ? this.apiConfig.uploadUrl(vinyl.id, path) : null;
-  }
-
-  protected artistNames(vinyl: VinylSummary): string {
-    return vinyl.artists.map((a) => a.name).join(', ');
-  }
+  protected readonly artistNames = artistNames;
 
   protected async confirmDelete(vinyl: VinylSummary): Promise<void> {
     const dialogRef = this.dialog.open<boolean>(ConfirmDialogComponent, {

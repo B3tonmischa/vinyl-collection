@@ -1,10 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  EventEmitter,
-  Input,
-  Output,
+  computed,
   inject,
+  input,
+  output,
   signal,
 } from '@angular/core';
 import { Dialog } from '@angular/cdk/dialog';
@@ -29,11 +29,11 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ImageUploadPanel {
-  @Input({ required: true }) vinylId!: number;
-  @Input({ required: true }) images!: VinylImage[];
+  readonly vinylId = input.required<number>();
+  readonly images = input.required<VinylImage[]>();
   /** The release's track sides; a side C or D means a disc 2, and so on. */
-  @Input() sides: readonly string[] = [];
-  @Output() imagesChanged = new EventEmitter<void>();
+  readonly sides = input<readonly string[]>([]);
+  readonly imagesChanged = output<void>();
 
   private readonly uploadsApi = inject(UploadsApiService);
   protected readonly apiConfig = inject(ApiConfigService);
@@ -54,28 +54,24 @@ export class ImageUploadPanel {
    * Discs that get slots (and that a scan starts with): the most of what
    * the images, the track sides and "Add another disc" call for.
    */
-  protected get discCount(): number {
-    const maxFromImages = this.images.reduce(
+  protected readonly discCount = computed(() => {
+    const maxFromImages = this.images().reduce(
       (max, img) => (DISC_IMAGE_KINDS.includes(img.kind) ? Math.max(max, img.discNumber) : max),
       1,
     );
-    return Math.max(maxFromImages, discCountForSides(this.sides), this.requestedDiscs());
-  }
+    return Math.max(maxFromImages, discCountForSides(this.sides()), this.requestedDiscs());
+  });
 
-  protected get discSlots(): ScanStep[] {
-    return discSteps(this.discCount);
-  }
+  protected readonly discSlots = computed(() => discSteps(this.discCount()));
 
-  protected get canAddDisc(): boolean {
-    return this.discCount < MAX_DISCS;
-  }
+  protected readonly canAddDisc = computed(() => this.discCount() < MAX_DISCS);
 
   protected addDisc(): void {
-    if (this.canAddDisc) this.requestedDiscs.set(this.discCount + 1);
+    if (this.canAddDisc()) this.requestedDiscs.set(this.discCount() + 1);
   }
 
   protected imageFor(slot: ScanStep): VinylImage | undefined {
-    return this.images.find((img) => img.kind === slot.kind && img.discNumber === slot.discNumber);
+    return this.images().find((img) => img.kind === slot.kind && img.discNumber === slot.discNumber);
   }
 
   protected readonly slotKey = slotKey;
@@ -99,7 +95,7 @@ export class ImageUploadPanel {
     const key = slotKey(slot);
     this.busyKey.set(key);
     try {
-      await this.uploadsApi.upload(this.vinylId, slot.kind, slot.discNumber, file);
+      await this.uploadsApi.upload(this.vinylId(), slot.kind, slot.discNumber, file);
       this.imagesChanged.emit();
       return true;
     } catch {
@@ -125,8 +121,8 @@ export class ImageUploadPanel {
   protected scanRecord(): void {
     this.openCamera({
       kind: 'guided',
-      discCount: this.discCount,
-      filledKeys: this.images.map(slotKey),
+      discCount: this.discCount(),
+      filledKeys: this.images().map(slotKey),
       onCapture: (step, file) => this.uploadFile(step, file),
     });
   }
@@ -145,10 +141,10 @@ export class ImageUploadPanel {
     const key = slotKey(slot);
     this.busyKey.set(key);
     try {
-      await this.uploadsApi.delete(this.vinylId, slot.kind, slot.discNumber);
+      await this.uploadsApi.delete(this.vinylId(), slot.kind, slot.discNumber);
       this.toast.show(`Deleted ${slot.label}.`, {
         undo: async () => {
-          await this.uploadsApi.restore(this.vinylId, slot.kind, slot.discNumber);
+          await this.uploadsApi.restore(this.vinylId(), slot.kind, slot.discNumber);
           this.imagesChanged.emit();
         },
       });
@@ -191,7 +187,7 @@ export class ImageUploadPanel {
     this.swapping.set(true);
     try {
       await this.uploadsApi.swap(
-        this.vinylId,
+        this.vinylId(),
         { kind: a.kind, discNumber: a.discNumber },
         { kind: b.kind, discNumber: b.discNumber },
       );

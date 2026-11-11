@@ -29,7 +29,6 @@ describe('ArtistsApiService', () => {
 
     const req = httpMock.expectOne(`${API_URL}/artists`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.withCredentials).toBe(true);
     expect(req.request.body).toEqual({ name: 'Pink Floyd' });
 
     const created: Artist = { id: 7, name: 'Pink Floyd' };

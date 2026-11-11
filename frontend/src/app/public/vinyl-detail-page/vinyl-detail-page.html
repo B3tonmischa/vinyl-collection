@@ -34,7 +34,7 @@
               {{ vinyl.title }}
             </h1>
             <p class="mt-1 text-lg text-neutral-600">
-              {{ artistNames(vinyl) || 'Unknown artist' }}
+              {{ artistNames(vinyl.artists) || 'Unknown artist' }}
               @if (vinyl.year) {
                 <span> · {{ vinyl.year }}</span>
               }

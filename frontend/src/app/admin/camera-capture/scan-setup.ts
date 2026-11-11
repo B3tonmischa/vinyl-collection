@@ -1,11 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  EventEmitter,
-  Input,
   OnInit,
-  Output,
   computed,
+  input,
+  output,
   signal,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -32,10 +31,10 @@ import { clamp } from './camera-capture.logic';
   host: { class: 'flex h-full w-full flex-col' },
 })
 export class ScanSetup implements OnInit {
-  @Input({ required: true }) initialDiscCount!: number;
+  readonly initialDiscCount = input.required<number>();
   /** slotKey()s of the slots that already have a photo. */
-  @Input({ required: true }) filledKeys!: string[];
-  @Output() start = new EventEmitter<ScanStep[]>();
+  readonly filledKeys = input.required<string[]>();
+  readonly start = output<ScanStep[]>();
 
   protected readonly discCount = signal(1);
   protected readonly items = signal<SetupItem[]>([]);
@@ -52,9 +51,9 @@ export class ScanSetup implements OnInit {
   private filled: ReadonlySet<string> = new Set();
 
   ngOnInit(): void {
-    this.filled = new Set(this.filledKeys);
-    this.discCount.set(this.initialDiscCount);
-    this.items.set(buildSetupItems(this.initialDiscCount, this.filled));
+    this.filled = new Set(this.filledKeys());
+    this.discCount.set(this.initialDiscCount());
+    this.items.set(buildSetupItems(this.initialDiscCount(), this.filled));
   }
 
   protected toggleItem(item: SetupItem): void {

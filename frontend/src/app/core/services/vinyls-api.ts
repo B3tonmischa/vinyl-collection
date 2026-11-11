@@ -30,30 +30,20 @@ export class VinylsApiService {
   }
 
   create(payload: VinylPayload): Promise<Vinyl> {
-    return firstValueFrom(
-      this.http.post<Vinyl>(`${this.apiConfig.apiUrl}/vinyls`, payload, { withCredentials: true }),
-    );
+    return firstValueFrom(this.http.post<Vinyl>(`${this.apiConfig.apiUrl}/vinyls`, payload));
   }
 
   update(id: number, payload: VinylPayload): Promise<Vinyl> {
-    return firstValueFrom(
-      this.http.patch<Vinyl>(`${this.apiConfig.apiUrl}/vinyls/${id}`, payload, {
-        withCredentials: true,
-      }),
-    );
+    return firstValueFrom(this.http.patch<Vinyl>(`${this.apiConfig.apiUrl}/vinyls/${id}`, payload));
   }
 
   softDelete(id: number): Promise<void> {
-    return firstValueFrom(
-      this.http.delete<void>(`${this.apiConfig.apiUrl}/vinyls/${id}`, { withCredentials: true }),
-    );
+    return firstValueFrom(this.http.delete<void>(`${this.apiConfig.apiUrl}/vinyls/${id}`));
   }
 
   restore(id: number): Promise<void> {
     return firstValueFrom(
-      this.http.post<void>(`${this.apiConfig.apiUrl}/vinyls/${id}/restore`, null, {
-        withCredentials: true,
-      }),
+      this.http.post<void>(`${this.apiConfig.apiUrl}/vinyls/${id}/restore`, null),
     );
   }
 }

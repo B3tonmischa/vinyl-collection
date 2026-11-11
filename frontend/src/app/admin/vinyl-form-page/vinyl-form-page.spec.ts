@@ -67,7 +67,7 @@ describe('VinylFormPage form-state refresh', () => {
 
     fixture = TestBed.createComponent(VinylFormPage);
     component = fixture.componentInstance;
-    component.id = '1';
+    fixture.componentRef.setInput('id', '1');
     fixture.detectChanges();
   });
 
@@ -92,7 +92,7 @@ describe('VinylFormPage form-state refresh', () => {
     // Simulate the import flow: the route's :id changes to a newly-created
     // vinyl while this component instance is reused (Angular does not
     // destroy/recreate it just because a route param changed).
-    component.id = '2';
+    fixture.componentRef.setInput('id', '2');
     fakeApi.detail.set(makeVinyl({ id: 2, title: 'Imported Title', year: 2024 }));
     fixture.detectChanges();
 
