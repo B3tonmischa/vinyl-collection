@@ -119,7 +119,9 @@ model VinylImage {
   // INNER_SLEEVE_A/INNER_SLEEVE_B), which stay single regardless of disc
   // count; varies for DISC_SIDE_A/B on multi-disc releases.
   discNumber Int       @default(1)
-  // Paths are relative to the /uploads static root, e.g. "12/cover-front-full.webp"
+  // Paths are relative to the uploads root, e.g.
+  // "12/cover-front-1-3f9a0c41b2de-full.webp" — every upload gets a name of
+  // its own, so a path's content never changes (see uploads.service.ts).
   fullPath   String
   thumbPath  String
   vinyl      Vinyl     @relation(fields: [vinylId], references: [id], onDelete: Cascade)

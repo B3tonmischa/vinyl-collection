@@ -78,8 +78,8 @@ describe('Image upload pipeline', () => {
       .expect(201);
 
     expect(res.body).toMatchObject({ vinylId, kind: 'COVER_FRONT', discNumber: 1 });
-    expect(res.body.fullPath).toBe(`${vinylId}/cover-front-1-full.webp`);
-    expect(res.body.thumbPath).toBe(`${vinylId}/cover-front-1-thumb.webp`);
+    expect(res.body.fullPath).toMatch(new RegExp(`^${vinylId}/cover-front-1-[0-9a-f]{12}-full\\.webp$`));
+    expect(res.body.thumbPath).toMatch(new RegExp(`^${vinylId}/cover-front-1-[0-9a-f]{12}-thumb\\.webp$`));
 
     const fullMeta = await sharp(
       join(ctx.uploadsDir, res.body.fullPath),
@@ -144,9 +144,11 @@ describe('Image upload pipeline', () => {
       .expect(201);
 
     // Same row (same id, same @@unique([vinylId, kind, discNumber]) slot),
-    // same paths — just re-processed content.
+    // but files of its own — and the replaced ones are gone from disk.
     expect(secondRes.body.id).toBe(firstImageId);
-    expect(secondRes.body.fullPath).toBe(firstRes.body.fullPath);
+    expect(secondRes.body.fullPath).not.toBe(firstRes.body.fullPath);
+    expect(existsSync(join(ctx.uploadsDir, firstRes.body.fullPath))).toBe(false);
+    expect(existsSync(join(ctx.uploadsDir, firstRes.body.thumbPath))).toBe(false);
 
     const fullMeta = await sharp(
       join(ctx.uploadsDir, secondRes.body.fullPath),
@@ -174,7 +176,7 @@ describe('Image upload pipeline', () => {
       .expect(201);
 
     expect(res.body.discNumber).toBe(1);
-    expect(res.body.fullPath).toBe(`${vinylId}/cover-front-1-full.webp`);
+    expect(res.body.fullPath).toMatch(new RegExp(`^${vinylId}/cover-front-1-[0-9a-f]{12}-full\\.webp$`));
   });
 
   it('rejects delete without a session', async () => {
