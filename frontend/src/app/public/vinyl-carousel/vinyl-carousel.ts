@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { CarouselStateService } from '../../core/services/carousel-state';
 import { VinylSummary } from '../../models/vinyl.model';
@@ -79,7 +90,7 @@ export class VinylCarouselComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly state = inject(CarouselStateService);
 
-  private readonly _vinyls = signal<VinylSummary[]>([]);
+  readonly vinyls = input.required<VinylSummary[]>();
   private readonly _center = signal<number | null>(null);
 
   private readonly reducedMotion =
@@ -111,31 +122,34 @@ export class VinylCarouselComponent {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.cancelAnimation());
-  }
 
-  @Input({ required: true })
-  set vinyls(value: VinylSummary[]) {
-    this._vinyls.set(value);
-    if (value.length > 0 && this._center() === null) {
-      const start = startIndex(value.map((v) => v.id), this.state.centeredVinylId);
-      if (start.restored || this.state.rolledIn) {
-        this.land(start.index);
-      } else {
-        this.state.rolledIn = true;
-        this.startRollIn(start.index);
-      }
-    }
+    // Picks where to open, once, when the collection first arrives. Only
+    // the list itself is a dependency: nothing read while landing or
+    // rolling in should run this again.
+    effect(() => {
+      const list = this.vinyls();
+      untracked(() => {
+        if (list.length === 0 || this._center() !== null) return;
+        const start = startIndex(list.map((v) => v.id), this.state.centeredVinylId);
+        if (start.restored || this.state.rolledIn) {
+          this.land(start.index);
+        } else {
+          this.state.rolledIn = true;
+          this.startRollIn(start.index);
+        }
+      });
+    });
   }
 
   protected readonly windowCards = computed(() => {
-    const list = this._vinyls();
+    const list = this.vinyls();
     const center = this._center();
     if (center === null || list.length === 0) return [];
     return computeWindow(center, list.length).map((item) => ({ ...item, vinyl: list[item.index] }));
   });
 
   protected readonly spinCards = computed(() => {
-    const list = this._vinyls();
+    const list = this.vinyls();
     const position = this.spinPosition();
     if (position === null || list.length === 0) return [];
     return spinSlots(position, list.length, SPIN_SLOT_RADIUS)
@@ -187,7 +201,7 @@ export class VinylCarouselComponent {
    */
   private shift(delta: number): void {
     if (this.rollingIn() || delta === 0) return;
-    const list = this._vinyls();
+    const list = this.vinyls();
     const center = this._center();
     if (center === null || list.length === 0) return;
     if (this.reducedMotion || !canAnimateStep(list.length)) {
@@ -217,7 +231,7 @@ export class VinylCarouselComponent {
   }
 
   private openCentered(): void {
-    const list = this._vinyls();
+    const list = this.vinyls();
     const center = this._center();
     if (center === null) return;
     const vinyl = list[center];
@@ -233,7 +247,7 @@ export class VinylCarouselComponent {
    */
   protected spinAgain(): void {
     if (this.rollingIn()) return;
-    const list = this._vinyls();
+    const list = this.vinyls();
     const center = this._center();
     if (center === null || list.length === 0) return;
     const from = this.spinning() ? (this.spinPosition() ?? center) : center;
@@ -276,7 +290,7 @@ export class VinylCarouselComponent {
     this.cancelAnimation();
     this.animationTarget = to;
     // Leaving mid-glide should come back to where it was headed.
-    const list = this._vinyls();
+    const list = this.vinyls();
     this.state.centeredVinylId = list[wrapIndex(to, list.length)]?.id ?? null;
     this.spinPosition.set(from);
     this.spinning.set(true);
@@ -300,7 +314,7 @@ export class VinylCarouselComponent {
 
   /** Settles the center on (unwrapped) slot `slot` and remembers that record for the next visit. */
   private land(slot: number): void {
-    const list = this._vinyls();
+    const list = this.vinyls();
     const index = wrapIndex(slot, list.length);
     this._center.set(index);
     this.state.centeredVinylId = list[index]?.id ?? null;

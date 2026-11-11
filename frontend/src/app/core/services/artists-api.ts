@@ -17,8 +17,6 @@ export class ArtistsApiService {
   }
 
   create(name: string): Promise<Artist> {
-    return firstValueFrom(
-      this.http.post<Artist>(`${this.apiConfig.apiUrl}/artists`, { name }, { withCredentials: true }),
-    );
+    return firstValueFrom(this.http.post<Artist>(`${this.apiConfig.apiUrl}/artists`, { name }));
   }
 }

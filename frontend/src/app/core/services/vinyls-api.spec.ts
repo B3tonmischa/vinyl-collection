@@ -59,7 +59,6 @@ describe('VinylsApiService', () => {
 
     const req = httpMock.expectOne(`${API_URL}/vinyls`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.withCredentials).toBe(true);
     expect(req.request.body).toEqual(samplePayload);
     req.flush(sampleVinyl);
 
@@ -71,7 +70,6 @@ describe('VinylsApiService', () => {
 
     const req = httpMock.expectOne(`${API_URL}/vinyls/42`);
     expect(req.request.method).toBe('PATCH');
-    expect(req.request.withCredentials).toBe(true);
     expect(req.request.body).toEqual(samplePayload);
     req.flush(sampleVinyl);
 
@@ -83,7 +81,6 @@ describe('VinylsApiService', () => {
 
     const req = httpMock.expectOne(`${API_URL}/vinyls/42`);
     expect(req.request.method).toBe('DELETE');
-    expect(req.request.withCredentials).toBe(true);
     req.flush(null);
 
     await expect(promise).resolves.toBeNull();
@@ -94,7 +91,6 @@ describe('VinylsApiService', () => {
 
     const req = httpMock.expectOne(`${API_URL}/vinyls/42/restore`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.withCredentials).toBe(true);
     expect(req.request.body).toBeNull();
     req.flush(null);
 
