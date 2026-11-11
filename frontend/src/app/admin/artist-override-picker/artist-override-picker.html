@@ -6,7 +6,7 @@
           type="checkbox"
           class="rounded border-neutral-300"
           [checked]="isChecked(artist)"
-          (change)="toggle.emit(artist)"
+          (change)="toggled.emit(artist)"
         />
         {{ artist.name }}
       </label>
@@ -16,7 +16,7 @@
         {{ guest.name }}
         <button
           type="button"
-          (click)="toggle.emit(guest)"
+          (click)="toggled.emit(guest)"
           class="text-amber-500 hover:text-amber-700"
           [attr.aria-label]="'Remove ' + guest.name"
         >

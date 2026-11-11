@@ -1,5 +1,6 @@
 // Data model matching the backend API contract exactly.
-// See project doc `architecture-and-data-model.md` for the source of truth.
+// The source of truth is backend/prisma/schema.prisma and the DTOs in
+// backend/src/vinyls/dto.
 
 export type ReleaseType = 'LP' | 'EP' | 'SINGLE' | 'COMPILATION' | 'BOX_SET';
 export type DiscSize = 'SEVEN_INCH' | 'TEN_INCH' | 'TWELVE_INCH';

@@ -44,8 +44,7 @@ function isFeaturingRole(role: string | undefined): boolean {
  * `sub_tracks` when present, and only keep an item as an importable track
  * when it has a title and its `type_` is either absent (older/smaller
  * releases often omit it) or exactly `"track"` — a `"heading"`/`"index"`
- * row is dropped rather than imported as a spurious track (see
- * discogs-import-feature-plan.md's backend design section).
+ * row is dropped rather than imported as a spurious track.
  */
 export function parseDiscogsTracklist(
   tracklist: DiscogsTracklistItemLike[],

@@ -13,7 +13,7 @@
 // Conics are 3×3 symmetric matrices C, row-major, with xᵀ C x = 0 on the
 // outline for x = (px, py, 1). A homography H maps a conic to H⁻ᵀ C H⁻¹.
 
-import { Circle, Point, Size } from './camera-capture.logic';
+import { Circle, Point } from './camera-capture.logic';
 
 export type Mat3 = number[];
 

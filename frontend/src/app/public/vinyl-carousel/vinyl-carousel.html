@@ -7,6 +7,12 @@
     @if (spinning()) {
       <div class="relative h-full w-full">
         @for (card of spinCards(); track card.virtualIndex) {
+          <!--
+            These cards exist only while the strip is gliding (a fraction of a
+            second); a click retargets the glide. The keyboard has the same
+            control through the arrow keys on the carousel itself.
+          -->
+          <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
           <div
             class="floating-card absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
             [class.cursor-pointer]="!rollingIn()"

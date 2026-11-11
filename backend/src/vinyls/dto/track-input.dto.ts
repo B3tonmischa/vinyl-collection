@@ -10,7 +10,7 @@ import {
 } from 'class-validator';
 
 // One track in the nested `tracks` array on create/update. `artistIds`
-// governs the inherit-vs-override rule (architecture-review-implementation-plan.md #3):
+// governs the inherit-vs-override rule:
 // omitted or empty -> inherits the vinyl's own artists; one or more ids ->
 // replaces the inherited list entirely for this track.
 export class TrackInputDto {

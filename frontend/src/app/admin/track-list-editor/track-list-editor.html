@@ -44,7 +44,7 @@
           [albumArtists]="albumArtists()"
           [dirty]="row.dirty"
           [overrideArtists]="row.overrideArtists"
-          (toggle)="onToggleArtist(row, $event)"
+          (toggled)="onToggleArtist(row, $event)"
           (add)="onAddArtist(row, $event)"
           (resetToInherit)="onResetToInherit(row)"
         />

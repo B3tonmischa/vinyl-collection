@@ -27,7 +27,7 @@ export class AdminShell {
 
   /**
    * Opens the Discogs search dialog. Per the accepted "fetch-and-upload
-   * immediately" design (see discogs-import-implementation-status.md),
+   * immediately" design (see ImportService.importRelease() in the backend),
    * picking a release already creates a real, persisted vinyl (images
    * attached) before the dialog closes — so this navigates to the *edit*
    * route for that id, not /admin/new. The existing edit page loads and

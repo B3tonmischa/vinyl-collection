@@ -6,8 +6,7 @@
 export interface DiscogsSearchResult {
   id: number;
   // Discogs's search API returns one combined "Artist - Title" string per
-  // result, not separate artist/title fields — see
-  // discogs-import-implementation-status.md for why the candidate list
+  // result, not separate artist/title fields. The candidate list
   // passes this through as-is instead of trying to split it.
   title: string;
   year?: number;

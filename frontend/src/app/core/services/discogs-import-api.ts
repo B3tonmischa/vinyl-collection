@@ -6,8 +6,7 @@ import { Vinyl } from '../../models/vinyl.model';
 import { DiscogsSearchCandidate, DiscogsSearchQuery } from '../../models/discogs.model';
 
 /**
- * What POST /import/discogs/:releaseId actually returns: per the deviation
- * documented in discogs-import-implementation-status.md, importing a
+ * What POST /import/discogs/:releaseId actually returns: importing a
  * release creates a real, persisted Vinyl (with images attached if they were
  * requested) rather than a non-persisted draft — so this is a full Vinyl,
  * plus the Discogs release link for attribution.

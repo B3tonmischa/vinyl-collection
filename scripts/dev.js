@@ -6,8 +6,7 @@
 // Deliberately dependency-free (plain `child_process`, no `concurrently`
 // or similar): this project's dev tooling has repeatedly hit
 // environment-specific breakage from third-party build/dev tools in this
-// codebase's history (sharp, lightningcss — see
-// frontend-implementation-status.md / discogs-import-implementation-status.md),
+// codebase's history (sharp, lightningcss),
 // and a two-line orchestration script isn't worth adding another one for.
 
 const { spawn } = require('node:child_process');

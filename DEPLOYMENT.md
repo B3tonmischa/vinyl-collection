@@ -331,8 +331,8 @@ update it, change the tag there and run the two commands above.
   substitute, so the escaped file and the working container value
   look different from each other on purpose.
 - **Backend container keeps restarting, logs show a migration/network
-  error reaching `binaries.prisma.sh`**: this is the same Prisma 7 CLI
-  behavior documented in `claude/architecture-and-data-model.md` — the
+  error reaching `binaries.prisma.sh`**: this is Prisma 7 CLI
+  behavior — the
   CLI needs to reach that host. Should just work on a normal home
   connection; if it doesn't, check the Pi's own internet access first,
   not the app.

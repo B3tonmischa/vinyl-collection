@@ -84,7 +84,7 @@ const SLUG_TO_KIND: Record<ImageKindSlug, ImageKind> = {
 
 // Packaging-level kinds are one-per-release regardless of how many discs it
 // has — discNumber stays 1 for these, unused, no matter what's requested.
-// Only the disc-side kinds are genuinely per-disc (see plan doc #4).
+// Only the disc-side kinds are genuinely per-disc.
 const PACKAGING_KINDS = new Set<ImageKind>([
   ImageKind.COVER_FRONT,
   ImageKind.COVER_BACK,
