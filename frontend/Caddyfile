@@ -28,19 +28,61 @@
 	encode gzip zstd
 
 	# Baseline hardening for every response, API and static files alike.
-	# No Content-Security-Policy beyond frame-ancestors (the scan worker's
-	# OpenCV build needs wasm/eval allowances that deserve their own
-	# change), and no HSTS: that would bind the whole domain, which this
-	# app only owns a subpath of.
+	# No HSTS: that would bind the whole domain, which this app only owns
+	# a subpath of.
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
-		Content-Security-Policy "frame-ancestors 'none'"
 		Referrer-Policy strict-origin-when-cross-origin
 		# The admin's camera capture is the only powerful feature in use.
 		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
 		-Server
 	}
+
+	# Content-Security-Policy. Everything the app loads is same-origin
+	# (bundles, styles, the API, uploaded images, the workers and the
+	# self-hosted OpenCV build), so the policy starts from default-src
+	# 'self'. The allowances beyond that:
+	#  - style-src 'unsafe-inline': Angular inserts each component's styles
+	#    as <style> elements at runtime, and [style.x] bindings set inline
+	#    styles. Hashing or nonces would need per-request nonce generation,
+	#    which a static file server doesn't do. Inline *scripts* stay
+	#    blocked. That is also why angular.json turns off inlineCritical:
+	#    the critical-CSS inliner adds an inline <script> to index.html.
+	#  - img-src https://*.discogs.com: the Discogs import dialog shows
+	#    search-result thumbnails straight from Discogs' image CDN
+	#    (i.discogs.com today, img.discogs.com in older data).
+	#  - object-src/base-uri/form-action/frame-ancestors: not covered by
+	#    default-src, so they are locked down explicitly.
+	#
+	# A worker takes its CSP from its own script response, not from the
+	# page that starts it, and the opencv.js it importScripts runs under
+	# that worker policy. So only the scan worker's own file,
+	# /workers/scan-worker.js, gets a second policy: the page policy plus
+	#  - script-src 'wasm-unsafe-eval': compiles OpenCV's WebAssembly.
+	#    It allows wasm compilation only, not eval().
+	#  - script-src 'unsafe-eval': OpenCV.js's embind bindings build
+	#    functions with `new Function` while they initialise
+	#    (createNamedFunction, makeDynCaller). Without this, the worker's
+	#    init fails with an EvalError, so the camera's auto-crop is gone.
+	#  - connect-src data:: opencv.js carries its wasm as a data: URI and
+	#    fetch()es it. When that fetch is blocked, Emscripten falls back to
+	#    decoding it synchronously, so this only avoids a logged violation
+	#    and the slower path. A data: fetch never leaves the browser.
+	# The matcher names that exact file, not /workers/*: try_files below
+	# serves index.html for any missing path, and that SPA page must never
+	# run under the eval-allowing policy. The page policy itself has no
+	# eval or wasm allowance. The other worker, Angular's disc-detect
+	# module worker (worker-<hash>.js at the app root), needs nothing
+	# beyond the page policy.
+	# Note: /workers/* is cached as immutable, keyed on its ?v= version,
+	# and the browser keeps the CSP header with the cached response. A
+	# change to the worker policy only reaches browsers that have the
+	# worker cached once WORKER_VERSION in scan-detector.ts is bumped.
+	@scanWorker path /vinyl-collection/workers/scan-worker.js
+	@notScanWorker not path /vinyl-collection/workers/scan-worker.js
+	header @notScanWorker Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.discogs.com; font-src 'self'; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	header @scanWorker Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.discogs.com; font-src 'self'; connect-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 	# Bare /vinyl-collection (no trailing slash) would otherwise fall
 	# through to the SPA handler below with a path that doesn't match
