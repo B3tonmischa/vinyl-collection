@@ -2,7 +2,17 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { DIALOG_DATA, Dialog, DialogRef } from '@angular/cdk/dialog';
 import { ApiConfigService } from '../../core/services/api-config';
 import { VinylImage } from '../../models/vinyl.model';
-import { lightboxSlides, positionLabel, startIndex, stepIndex, swipeStep } from './lightbox.logic';
+import {
+  NO_GESTURE,
+  SwipeGesture,
+  gestureDown,
+  gestureUp,
+  lightboxSlides,
+  positionLabel,
+  slideAnnouncement,
+  startIndex,
+  stepIndex,
+} from './lightbox.logic';
 
 export interface LightboxData {
   vinylId: number;
@@ -60,6 +70,11 @@ export class LightboxComponent {
   protected readonly index = signal(startIndex(this.slides, this.data.startImageId));
   protected readonly slide = computed(() => this.slides[this.index()]);
   protected readonly position = computed(() => positionLabel(this.index(), this.slides.length));
+  /** Caption and position in one live region, so a page turn is announced once. */
+  protected readonly announcement = computed(() => {
+    const slide = this.slide();
+    return slide ? slideAnnouncement(slide.caption, this.index(), this.slides.length) : '';
+  });
   protected readonly url = computed(() => {
     const slide = this.slide();
     return slide ? this.apiConfig.uploadUrl(this.data.vinylId, slide.image.fullPath) : '';
@@ -67,7 +82,7 @@ export class LightboxComponent {
   /** Id of the image whose file has loaded, so the spinner shows only while one is on its way. */
   protected readonly loadedId = signal<number | null>(null);
 
-  private touchStart: { x: number; y: number } | null = null;
+  private gesture: SwipeGesture = NO_GESTURE;
   /** Set by a swipe so the click some browsers fire after it doesn't close the lightbox. */
   private swiped = false;
 
@@ -96,21 +111,22 @@ export class LightboxComponent {
 
   protected onPointerDown(event: PointerEvent): void {
     if (event.pointerType === 'mouse') return;
-    this.touchStart = { x: event.clientX, y: event.clientY };
+    // Pinch-zoomed in, a one-finger drag should pan the photo, not page.
+    const zoomed = (window.visualViewport?.scale ?? 1) > 1.01;
+    this.gesture = gestureDown(this.gesture, this.touchPoint(event), zoomed);
     this.swiped = false;
   }
 
-  protected onPointerUp(event: PointerEvent): void {
-    const start = this.touchStart;
-    this.touchStart = null;
-    if (!start) return;
-    const delta = swipeStep(event.clientX - start.x, event.clientY - start.y);
-    if (delta === 0) return;
+  protected onPointerUp(event: PointerEvent, cancelled = false): void {
+    if (event.pointerType === 'mouse') return;
+    const { gesture, step } = gestureUp(this.gesture, this.touchPoint(event), cancelled);
+    this.gesture = gesture;
+    if (step === 0) return;
     this.swiped = true;
-    this.step(delta);
+    this.step(step);
   }
 
-  protected onPointerCancel(): void {
-    this.touchStart = null;
+  private touchPoint(event: PointerEvent) {
+    return { id: event.pointerId, x: event.clientX, y: event.clientY };
   }
 }

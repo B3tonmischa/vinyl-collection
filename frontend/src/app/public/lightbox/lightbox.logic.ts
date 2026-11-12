@@ -93,3 +93,62 @@ export function swipeStep(dx: number, dy: number): -1 | 0 | 1 {
   if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return 0;
   return dx < 0 ? 1 : -1;
 }
+
+/** A finger on the screen, as a pointer event reports it. */
+export interface TouchPoint {
+  id: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * The touch gesture in progress: the fingers down and where the one that
+ * may become a swipe started. Once a second finger joins (a pinch) the
+ * gesture can no longer be a swipe until every finger has lifted.
+ */
+export interface SwipeGesture {
+  start: TouchPoint | null;
+  down: readonly number[];
+  multi: boolean;
+}
+
+export const NO_GESTURE: SwipeGesture = { start: null, down: [], multi: false };
+
+/**
+ * A finger goes down. With `zoomed` (the page is pinch-zoomed in) it starts
+ * no swipe, so a one-finger drag pans the enlarged photo instead.
+ */
+export function gestureDown(
+  gesture: SwipeGesture,
+  touch: TouchPoint,
+  zoomed: boolean,
+): SwipeGesture {
+  const down = [...gesture.down.filter((id) => id !== touch.id), touch.id];
+  const multi = gesture.multi || down.length > 1;
+  return { start: multi || zoomed ? null : touch, down, multi };
+}
+
+/**
+ * A finger lifts (or the browser takes the gesture over, `cancelled`).
+ * Returns the gesture that remains and the step it pages by: a swipe only
+ * when it was the lone finger the gesture started with.
+ */
+export function gestureUp(
+  gesture: SwipeGesture,
+  touch: TouchPoint,
+  cancelled = false,
+): { gesture: SwipeGesture; step: -1 | 0 | 1 } {
+  const down = gesture.down.filter((id) => id !== touch.id);
+  const start = gesture.start;
+  const step =
+    !cancelled && !gesture.multi && start?.id === touch.id
+      ? swipeStep(touch.x - start.x, touch.y - start.y)
+      : 0;
+  const rest = down.length === 0 ? NO_GESTURE : { start: null, down, multi: gesture.multi };
+  return { gesture: rest, step };
+}
+
+/** "Front cover, photo 3 of 7": what a screen reader hears as the slide changes. */
+export function slideAnnouncement(caption: string, index: number, count: number): string {
+  return `${caption}, photo ${index + 1} of ${count}`;
+}

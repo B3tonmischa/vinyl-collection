@@ -1,9 +1,8 @@
 <!-- The dark area around the photo, header and footer included, acts as the backdrop (see onBackdropClick). -->
 <div class="flex h-full flex-col bg-neutral-950 text-white select-none">
   <div class="flex items-center justify-between gap-4 px-4 py-3">
-    <p class="text-sm text-neutral-300 tabular-nums">
-      <span class="sr-only">Photo </span>{{ position() }}
-    </p>
+    <!-- Screen readers hear the position with the caption, in the live region below. -->
+    <p class="text-sm text-neutral-300 tabular-nums" aria-hidden="true">{{ position() }}</p>
     <button
       type="button"
       class="lightbox-close flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-neutral-200 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white"
@@ -24,10 +23,10 @@
   </div>
 
   <div
-    class="relative flex min-h-0 flex-1 touch-pan-y items-center justify-center px-2 sm:px-20"
+    class="relative flex min-h-0 flex-1 touch-pan-y touch-pinch-zoom items-center justify-center px-2 sm:px-20"
     (pointerdown)="onPointerDown($event)"
     (pointerup)="onPointerUp($event)"
-    (pointercancel)="onPointerCancel()"
+    (pointercancel)="onPointerUp($event, true)"
   >
     @if (slide(); as slide) {
       @if (loadedId() !== slide.image.id) {
@@ -84,6 +83,7 @@
   </div>
 
   <div class="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-    <p class="text-center text-sm text-neutral-200" aria-live="polite">{{ slide()?.caption }}</p>
+    <p class="text-center text-sm text-neutral-200" aria-hidden="true">{{ slide()?.caption }}</p>
+    <p class="sr-only" aria-live="polite">{{ announcement() }}</p>
   </div>
 </div>

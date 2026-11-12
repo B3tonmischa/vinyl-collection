@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ImageKind, VinylImage } from '../../models/vinyl.model';
 import {
+  NO_GESTURE,
+  gestureDown,
+  gestureUp,
   lightboxSlides,
   positionLabel,
+  slideAnnouncement,
   slideCaption,
   startIndex,
   stepIndex,
@@ -125,5 +129,59 @@ describe('swipeStep', () => {
     expect(swipeStep(0, 0)).toBe(0);
     expect(swipeStep(-20, 0)).toBe(0);
     expect(swipeStep(-60, 90)).toBe(0);
+  });
+});
+
+describe('gestureDown / gestureUp', () => {
+  const at = (id: number, x: number, y = 100) => ({ id, x, y });
+
+  it('pages on a one-finger swipe', () => {
+    const down = gestureDown(NO_GESTURE, at(1, 300), false);
+    expect(gestureUp(down, at(1, 120))).toEqual({ gesture: NO_GESTURE, step: 1 });
+    const back = gestureDown(NO_GESTURE, at(2, 100), false);
+    expect(gestureUp(back, at(2, 300)).step).toBe(-1);
+  });
+
+  it('does not read a two-finger pinch as a swipe, whichever finger lifts first', () => {
+    let gesture = gestureDown(NO_GESTURE, at(1, 300), false);
+    gesture = gestureDown(gesture, at(2, 320), false);
+    const first = gestureUp(gesture, at(1, 100));
+    expect(first.step).toBe(0);
+    const second = gestureUp(first.gesture, at(2, 400));
+    expect(second).toEqual({ gesture: NO_GESTURE, step: 0 });
+  });
+
+  it('stays a pinch while one finger of it is still down', () => {
+    let gesture = gestureDown(NO_GESTURE, at(1, 300), false);
+    gesture = gestureDown(gesture, at(2, 320), false);
+    gesture = gestureUp(gesture, at(2, 320)).gesture;
+    gesture = gestureDown(gesture, at(3, 300), false);
+    expect(gestureUp(gesture, at(3, 100)).step).toBe(0);
+  });
+
+  it('swipes again once every finger of a pinch has lifted', () => {
+    let gesture = gestureDown(NO_GESTURE, at(1, 300), false);
+    gesture = gestureDown(gesture, at(2, 320), false);
+    gesture = gestureUp(gesture, at(1, 300)).gesture;
+    gesture = gestureUp(gesture, at(2, 320)).gesture;
+    expect(gesture).toEqual(NO_GESTURE);
+    gesture = gestureDown(gesture, at(3, 300), false);
+    expect(gestureUp(gesture, at(3, 100)).step).toBe(1);
+  });
+
+  it('starts no swipe while the page is zoomed in, so a drag pans the photo', () => {
+    const gesture = gestureDown(NO_GESTURE, at(1, 300), true);
+    expect(gestureUp(gesture, at(1, 100)).step).toBe(0);
+  });
+
+  it('does not page when the browser cancels the gesture', () => {
+    const gesture = gestureDown(NO_GESTURE, at(1, 300), false);
+    expect(gestureUp(gesture, at(1, 100), true)).toEqual({ gesture: NO_GESTURE, step: 0 });
+  });
+});
+
+describe('slideAnnouncement', () => {
+  it('reads the caption with the position', () => {
+    expect(slideAnnouncement('Disc 1, side A', 3, 7)).toBe('Disc 1, side A, photo 4 of 7');
   });
 });
