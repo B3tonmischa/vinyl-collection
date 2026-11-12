@@ -129,6 +129,28 @@ export function discSideLabel(disc: RecordDisc, flipped: boolean, discCount: num
   return discCount > 1 ? `Disc ${disc.discNumber}, side ${side}` : `Side ${side}`;
 }
 
+/**
+ * The photo facing the viewer: the cover or inner sleeve on show, or the
+ * upward side of the centred disc (the first disc when they are all out
+ * side by side). Falls back to the front cover, and is null without one.
+ */
+export function facingImage(
+  parts: RecordParts,
+  view: SleeveView,
+  discsOut: boolean,
+  flipped: ReadonlySet<number>,
+  focusedDisc: number | null,
+): VinylImage | null {
+  if (view === 'open') return parts.innerA ?? parts.innerB ?? parts.front;
+  if (view === 'back') return parts.back ?? parts.front;
+  const disc = discsOut ? parts.discs[focusedDisc ?? 0] : undefined;
+  if (disc) {
+    const side = shownSide(disc, flipped.has(disc.discNumber));
+    return (side === 'A' ? disc.sideA : disc.sideB) ?? parts.front;
+  }
+  return parts.front;
+}
+
 // Geometry, in units of the sleeve's side. record-viewer.css uses the same numbers.
 export const MAX_SLEEVE_PX = 400;
 /** Share of the available width the sleeve takes when there is less than MAX_SLEEVE_PX to spare. */

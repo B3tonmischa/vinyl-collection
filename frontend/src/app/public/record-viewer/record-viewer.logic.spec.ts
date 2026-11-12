@@ -3,6 +3,7 @@ import { ImageKind, VinylImage } from '../../models/vinyl.model';
 import {
   canFlip,
   discSideLabel,
+  facingImage,
   innerPanels,
   focusesDiscs,
   recordLayout,
@@ -222,5 +223,33 @@ describe('recordLayout', () => {
 
   it('never divides by zero before it has been measured', () => {
     expect(recordLayout(0, 'front', false, 1)).toEqual({ size: 0, scale: 1, x: 0, y: 0, slot: 0 });
+  });
+});
+
+describe('facingImage', () => {
+  const front = image('COVER_FRONT');
+  const back = image('COVER_BACK');
+  const innerB = image('INNER_SLEEVE_B');
+  const d1a = image('DISC_SIDE_A', 1);
+  const d1b = image('DISC_SIDE_B', 1);
+  const d2a = image('DISC_SIDE_A', 2);
+  const parts = recordParts([front, back, innerB, d1a, d1b, d2a]);
+  const none = new Set<number>();
+
+  it('is the cover or inner sleeve on show', () => {
+    expect(facingImage(parts, 'front', false, none, null)).toBe(front);
+    expect(facingImage(parts, 'open', false, none, null)).toBe(innerB);
+    expect(facingImage(parts, 'back', false, none, null)).toBe(back);
+  });
+
+  it('is the upward side of the first or the centred disc once they are out', () => {
+    expect(facingImage(parts, 'front', true, none, null)).toBe(d1a);
+    expect(facingImage(parts, 'front', true, new Set([1]), null)).toBe(d1b);
+    expect(facingImage(parts, 'front', true, none, 1)).toBe(d2a);
+  });
+
+  it('falls back to the front cover, or nothing without one', () => {
+    expect(facingImage(recordParts([front]), 'back', false, none, null)).toBe(front);
+    expect(facingImage(recordParts([d1b]), 'front', false, none, null)).toBeNull();
   });
 });
