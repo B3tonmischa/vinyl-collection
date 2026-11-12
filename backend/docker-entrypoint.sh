@@ -1,6 +1,13 @@
 #!/bin/sh
 set -e
 
+# One-off commands, e.g. `docker compose run --rm backend node
+# scripts/find-orphan-uploads.js`, arrive here as arguments. Run them as
+# given, without applying migrations or starting a second server.
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
 # `migrate deploy` only applies pending migrations and is a safe no-op
 # when the database is already up to date — running it on every
 # container start keeps the schema current after a `git pull` that
