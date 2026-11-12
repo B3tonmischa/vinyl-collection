@@ -260,6 +260,29 @@ bring it back. The backend removes the files of anything deleted more
 than 30 days ago, at startup and once a day — a backup is the only way
 back after that.
 
+### Finding orphaned upload files
+
+Before the image-swap fix, re-uploading a swapped slot could leave files
+in `data/uploads` that no database row points at. A script lists them;
+by default it only prints and deletes nothing:
+
+```bash
+docker compose run --rm backend node scripts/find-orphan-uploads.js
+```
+
+A file counts as orphaned when no image row references it as its full
+image or thumbnail. Images deleted in the admin but not yet purged still
+count as referenced, and files younger than one day are always skipped.
+Take a backup (see above) before deleting, then review the list and run:
+
+```bash
+docker compose run --rm backend node scripts/find-orphan-uploads.js --delete
+```
+
+The script reads the same `DATABASE_URL` and `UPLOADS_ROOT` as the
+backend, and refuses to delete if the database has no image rows at all
+but the uploads folder has files.
+
 ## Updating
 
 ```bash
