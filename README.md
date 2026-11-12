@@ -19,6 +19,11 @@ Node 26 (see `.node-version`). The backend has native dependencies
 (`better-sqlite3`, `sharp`) that are built for the Node version that installs
 them, so install and run with the same one.
 
+## Development rules
+
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing code: it covers the
+scan worker's versioning, upload paths, API shapes and branch rules.
+
 ## Local development
 
 First-time setup, once per checkout:
