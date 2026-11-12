@@ -19,6 +19,7 @@ export function openLightbox(dialog: Dialog, data: LightboxData, trigger?: HTMLE
   dialog.open(LightboxComponent, {
     data,
     ariaLabel: 'Photos of this record',
+    ariaModal: true,
     autoFocus: '.lightbox-close',
     width: '100vw',
     height: '100dvh',

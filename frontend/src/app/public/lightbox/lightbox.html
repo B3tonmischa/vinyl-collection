@@ -1,5 +1,5 @@
 <!-- The dark area around the photo, header and footer included, acts as the backdrop (see onBackdropClick). -->
-<div class="flex h-full flex-col bg-neutral-950/95 text-white select-none">
+<div class="flex h-full flex-col bg-neutral-950 text-white select-none">
   <div class="flex items-center justify-between gap-4 px-4 py-3">
     <p class="text-sm text-neutral-300 tabular-nums">
       <span class="sr-only">Photo </span>{{ position() }}
@@ -25,7 +25,6 @@
 
   <div
     class="relative flex min-h-0 flex-1 touch-pan-y items-center justify-center px-2 sm:px-20"
-   
     (pointerdown)="onPointerDown($event)"
     (pointerup)="onPointerUp($event)"
     (pointercancel)="onPointerCancel()"

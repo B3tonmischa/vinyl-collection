@@ -10,7 +10,9 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { Dialog } from '@angular/cdk/dialog';
 import { ApiConfigService } from '../../core/services/api-config';
+import { openLightbox } from '../lightbox/lightbox';
 import { VinylImage } from '../../models/vinyl.model';
 import {
   RecordDisc,
@@ -18,6 +20,7 @@ import {
   SleeveView,
   canFlip,
   discSideLabel,
+  facingImage,
   focusesDiscs,
   innerPanels,
   recordLayout,
@@ -57,6 +60,7 @@ export class RecordViewerComponent {
   readonly images = input.required<VinylImage[]>();
 
   private readonly apiConfig = inject(ApiConfigService);
+  private readonly dialog = inject(Dialog);
   private readonly scene = viewChild<ElementRef<HTMLElement>>('scene');
 
   protected readonly parts = computed(() => recordParts(this.images()));
@@ -134,6 +138,22 @@ export class RecordViewerComponent {
         cancelAnimationFrame(frame);
       });
     });
+  }
+
+  /** Opens the lightbox on the photo facing the viewer. */
+  protected enlarge(event: MouseEvent): void {
+    const facing = facingImage(
+      this.parts(),
+      this.view(),
+      this.discsOut(),
+      this.flipped(),
+      this.focusedDisc(),
+    );
+    openLightbox(
+      this.dialog,
+      { vinylId: this.vinylId(), images: this.images(), startImageId: facing?.id ?? null },
+      event.currentTarget as HTMLElement,
+    );
   }
 
   protected url(image: VinylImage): string {

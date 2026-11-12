@@ -74,11 +74,7 @@ describe('slideCaption', () => {
 });
 
 describe('startIndex', () => {
-  const slides = lightboxSlides([
-    image('COVER_FRONT'),
-    image('COVER_BACK'),
-    image('DISC_SIDE_A'),
-  ]);
+  const slides = lightboxSlides([image('COVER_FRONT'), image('COVER_BACK'), image('DISC_SIDE_A')]);
 
   it('starts on the clicked image', () => {
     expect(startIndex(slides, slides[2].image.id)).toBe(2);
